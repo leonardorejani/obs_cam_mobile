@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBS Cam Mobile | simulação do fluxo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0A0A; --fg:#FAFAFA; --card:#161618; --muted:#232326; --muted-fg:#A1A1AA; --border:#2A2A2E;
+  --brand-deep:#6D28D9; --brand:#7C3AED; --brand-lum:#A855F7; --ok:#22C55E; --warn:#F59E0B; --err:#DC2626;
+  --obs:#1F1E25; --obs-2:#2B2A33; --obs-3:#3A3944; --win:#202020; --win-2:#2C2C2C;
+  --r-sm:10px; --r:14px; --r-lg:18px;
+  --ease-out:cubic-bezier(.23,1,.32,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:Manrope,system-ui,sans-serif;font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--brand-lum);outline-offset:2px}
+.top{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border)}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum));display:grid;place-items:center;font-weight:800}
+.top h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.015em}
+.top .sub{color:var(--muted-fg);font-size:13px}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 69px)}
+.side{border-right:1px solid var(--border);padding:16px;overflow:auto}
+.fase{margin-bottom:16px}
+.fase h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-fg);margin:0 0 8px;font-weight:700}
+.passo{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:none;border:0;border-radius:var(--r-sm);padding:8px;font-size:13.5px;color:var(--muted-fg);min-height:40px}
+.passo:hover{background:var(--muted)}
+.passo .n{width:22px;height:22px;border-radius:999px;border:1px solid var(--border);display:grid;place-items:center;font-size:11px;font-weight:700;flex:none;font-variant-numeric:tabular-nums}
+.passo.feito{color:var(--fg)} .passo.feito .n{background:var(--ok);border-color:var(--ok);color:#052e12}
+.passo.atual{background:var(--muted);color:var(--fg);font-weight:700} .passo.atual .n{background:var(--brand);border-color:var(--brand)}
+.main{padding:24px;display:flex;flex-direction:column;gap:24px;min-width:0}
+.guia{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.guia .tag{font-size:12px;font-weight:700;color:var(--brand-lum)}
+.guia h2{margin:4px 0 8px;font-size:20px;font-weight:800;letter-spacing:-.015em}
+.guia p{margin:0;color:var(--muted-fg);max-width:640px}
+.guia .dica{margin-top:12px;font-size:13px;color:var(--fg);display:flex;gap:8px;align-items:center}
+.guia .dica::before{content:"";width:8px;height:8px;border-radius:99px;background:var(--brand-lum);flex:none}
+.nav{display:flex;gap:8px;flex-wrap:wrap}
+.btn{min-height:44px;padding:0 16px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--muted);font-weight:700;transition:transform .1s var(--ease-out)}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:var(--brand);border-color:var(--brand)}
+.btn.warn{background:transparent;border-color:var(--warn);color:var(--warn)}
+.btn:disabled{opacity:.4;cursor:default}
+.palco{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}
+.legenda{font-size:12px;color:var(--muted-fg);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
+
+/* iPhone */
+.phone{width:290px;height:600px;border-radius:46px;background:#000;border:10px solid #1c1c1e;box-shadow:0 0 0 2px #3a3a3c;position:relative;overflow:hidden;color:#fff}
+.phone .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:96px;height:28px;border-radius:20px;background:#000;z-index:5}
+.phone .sb{position:absolute;top:0;left:0;right:0;height:44px;display:flex;justify-content:space-between;align-items:center;padding:0 26px;font-size:13px;font-weight:700;z-index:4}
+.phone .tela{position:absolute;inset:0;padding:52px 16px 20px;display:flex;flex-direction:column}
+.phone.noar{border-color:var(--err)}
+.ios-bg{background:linear-gradient(160deg,#1b1340,#0b0b14)}
+.ios-list{background:#000}
+.ios-h{font-size:28px;font-weight:800;margin:8px 0 12px}
+.ios-group{background:#1c1c1e;border-radius:12px;overflow:hidden;margin-bottom:16px}
+.ios-row{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #2c2c2e;font-size:14px;min-height:44px}
+.ios-row:last-child{border-bottom:0}
+.ios-foot{font-size:12px;color:#8e8e93;padding:0 6px;margin-top:-8px;margin-bottom:16px}
+.tog{width:51px;height:31px;border-radius:99px;background:#39393d;border:0;position:relative;flex:none}
+.tog::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:99px;background:#fff;transition:transform .2s var(--ease-out)}
+.tog.on{background:#34c759} .tog.on::after{transform:translateX(20px)}
+.alerta-ios{position:absolute;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:6;padding:24px}
+.alerta-ios .box{background:#2c2c2e;border-radius:14px;width:100%;text-align:center;overflow:hidden}
+.alerta-ios .tx{padding:18px 16px}
+.alerta-ios b{display:block;font-size:16px;margin-bottom:4px}
+.alerta-ios small{font-size:13px;color:#d1d1d6;display:block}
+.alerta-ios .bts{display:flex;border-top:1px solid #48484a}
+.alerta-ios .bts button{flex:1;background:none;border:0;padding:12px;color:#0a84ff;font-size:16px;min-height:44px}
+.alerta-ios .bts button+button{border-left:1px solid #48484a;font-weight:700}
+.home{display:grid;grid-template-columns:repeat(4,1fr);gap:18px 10px;margin-top:20px}
+.app{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;background:none;border:0;padding:0}
+.app i{width:52px;height:52px;border-radius:13px;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:13px}
+.app-fm i{background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))}
+.app-ss i{background:linear-gradient(135deg,#3b82f6,#1e3a8a)}
+.app-x i{background:#2c2c2e}
+.sstore .item{display:flex;gap:12px;align-items:center;background:#1c1c1e;border-radius:12px;padding:12px;margin-bottom:12px}
+.sstore .item i{width:44px;height:44px;border-radius:11px;flex:none;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:12px}
+.sstore .item .t{flex:1;font-size:14px;font-weight:700}
+.sstore .item .t small{display:block;font-weight:600;color:#8e8e93;font-size:12px}
+.pill-ios{background:#0a84ff;border:0;border-radius:99px;padding:6px 14px;font-weight:700;font-size:13px;min-height:32px}
+.pill-ios.amber{background:var(--warn);color:#111}
+.cam{position:absolute;inset:0;overflow:hidden}
+.cam-hud{position:absolute;left:12px;right:12px;bottom:18px;background:rgba(0,0,0,.6);border-radius:14px;padding:12px;font-size:12.5px;backdrop-filter:blur(8px)}
+.cam-hud .l1{display:flex;justify-content:space-between;font-weight:700;font-size:13.5px}
+.cam-hud .l2{color:#d1d1d6;margin-top:4px;font-variant-numeric:tabular-nums}
+.noar-tag{position:absolute;top:52px;left:50%;transform:translateX(-50%);background:var(--err);color:#fff;font-weight:800;font-size:12px;padding:4px 12px;border-radius:99px;letter-spacing:.06em;z-index:3}
+.locks{position:absolute;top:52px;right:14px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.locks span{background:rgba(245,158,11,.9);color:#111;font-weight:800;font-size:11px;border-radius:6px;padding:2px 6px}
+.estado{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px}
+.dot{width:12px;height:12px;border-radius:99px;display:inline-block}
+.pulse{animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* feed simulado */
+.feed{position:absolute;inset:0;background:linear-gradient(180deg,#2a1b4d 0%,#3b2a63 45%,#1a1424 46%,#120e1a 100%)}
+.feed .luz{position:absolute;top:0;width:40%;height:60%;background:radial-gradient(ellipse at top,rgba(255,240,200,.35),transparent 70%)}
+.feed .pulpito{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);width:22%;height:26%;background:#0d0a12;border-radius:6px 6px 0 0}
+.feed .pessoa{position:absolute;bottom:40%;left:50%;transform:translateX(-50%);width:12%;aspect-ratio:1/2.2;background:#09070d;border-radius:40% 40% 10% 10%}
+.feed .tc{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.6);font:700 12px ui-monospace,monospace;padding:2px 6px;border-radius:4px;color:#fff;font-variant-numeric:tabular-nums}
+.feed.congelado{filter:grayscale(.7) brightness(.6)}
+.phone .feed .tc{top:88px;left:14px}
+
+/* PC */
+.pc{background:#0f1b2d;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;height:600px;position:relative;display:flex;flex-direction:column;min-width:0}
+.pc .desk{flex:1;position:relative;padding:20px;display:grid;place-items:center;background:radial-gradient(ellipse at 30% 20%,#1d3b66,#0b1424)}
+.pc .taskbar{height:40px;background:rgba(32,32,32,.95);display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;color:#ccc}
+.pc .taskbar span{padding:4px 10px;border-radius:6px;background:#2c2c2c}
+.win{background:var(--win);border:1px solid #3a3a3a;border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.5);width:100%;max-width:640px;overflow:hidden;font-size:13.5px}
+.win .tb{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--win-2);font-size:12.5px;color:#ddd}
+.win .tb .ctl{letter-spacing:10px;color:#999}
+.win .bd{padding:20px}
+.win h4{margin:0 0 6px;font-size:17px;font-weight:800}
+.win p{margin:0 0 12px;color:#bbb}
+.check{display:flex;gap:8px;align-items:center;padding:6px 0;color:#ddd}
+.check .s{width:18px;height:18px;border-radius:99px;display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+.s.ok{background:var(--ok);color:#052e12} .s.wt{border:2px solid var(--warn)} .s.no{background:var(--err)}
+.barra{height:8px;background:#333;border-radius:99px;overflow:hidden;margin:12px 0}
+.barra i{display:block;height:100%;background:var(--brand);width:0;transition:width .3s linear}
+.wbtn{min-height:36px;padding:0 18px;border-radius:6px;border:1px solid #555;background:#2d2d2d;color:#fff;font-weight:600}
+.wbtn.pri{background:#0067c0;border-color:#0067c0}
+.wrow{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.campo{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#bbb}
+.campo input,.campo select{background:#1a1a1a;border:1px solid #444;border-radius:6px;color:#fff;padding:8px;font:inherit;font-size:13.5px;min-height:36px}
+.ms-card{display:flex;gap:16px;align-items:center}
+.ms-card i{width:72px;height:72px;border-radius:14px;background:#e5e5e5;display:grid;place-items:center;font-style:normal;font-weight:800;color:#111;flex:none}
+
+/* OBS */
+.obs{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--obs);font-size:12.5px;color:#ddd}
+.obs .tb{height:30px;background:#16151b;display:flex;align-items:center;padding:0 10px;font-size:12px;color:#aaa}
+.obs .vis{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;min-height:0}
+.obs .vis.um{grid-template-columns:1fr}
+.obs .tela-obs{position:relative;background:#000;border-radius:4px;overflow:hidden;aspect-ratio:16/9;align-self:center;width:100%}
+.obs .rot{position:absolute;bottom:4px;left:6px;font-size:11px;color:#aaa;font-weight:700;z-index:2}
+.obs .meio{display:flex;align-items:center;justify-content:center;padding:4px}
+.obs .docks{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:8px;padding:0 10px 10px;height:190px}
+.dock{background:var(--obs-2);border-radius:4px;display:flex;flex-direction:column;min-height:0}
+.dock h5{margin:0;padding:6px 8px;font-size:11.5px;font-weight:700;border-bottom:1px solid var(--obs-3);color:#ccc}
+.dock .li{padding:6px 8px;display:flex;justify-content:space-between;align-items:center}
+.dock .li.sel{background:#3b3a8a}
+.dock .ft{margin-top:auto;display:flex;gap:4px;padding:4px;border-top:1px solid var(--obs-3)}
+.dock .ft button{background:var(--obs-3);border:0;border-radius:3px;min-width:26px;height:24px;font-weight:800}
+.dock .bt{display:flex;flex-wrap:wrap;gap:6px;padding:8px}
+.dock .bt button{background:var(--obs-3);border:1px solid #4a4955;border-radius:4px;padding:5px 9px;font-size:12px;min-height:30px}
+.dock .bt button.on{background:var(--brand);border-color:var(--brand)}
+.menu{position:absolute;background:#2b2a33;border:1px solid #4a4955;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:10;min-width:200px;padding:4px 0}
+.menu div,.menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:6px 12px;font-size:12.5px;color:#ddd}
+.menu .hi{color:#fff;font-weight:700}
+.dlg{position:absolute;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;z-index:9;padding:16px}
+.dlg .win{max-width:560px}
+.dlg .prev{position:relative;height:140px;background:#000;border-radius:4px;overflow:hidden;margin-bottom:14px}
+.aviso-src{position:absolute;inset:auto 8px 28px 8px;background:rgba(245,158,11,.92);color:#111;font-weight:800;font-size:12px;padding:6px 8px;border-radius:4px;text-align:center;z-index:3}
+.vazio{position:absolute;inset:0;display:grid;place-items:center;color:#666;font-size:12px}
+.chk{display:flex;gap:8px;align-items:center;padding:4px 0}
+
+/* alvo pulsando */
+.alvo{position:relative;animation:alvo 1.6s infinite}
+@keyframes alvo{0%{box-shadow:0 0 0 0 rgba(168,85,247,.85)}70%{box-shadow:0 0 0 10px rgba(168,85,247,0)}100%{box-shadow:0 0 0 0 rgba(168,85,247,0)}}
+
+/* log */
+.log{background:#050505;border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c4c4cc;max-height:190px;overflow:auto}
+.log .h{font-family:Manrope,sans-serif;font-weight:700;color:var(--muted-fg);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+.log .t{color:#71717a} .log .k{color:var(--brand-lum)} .log .ok{color:var(--ok)} .log .w{color:var(--warn)}
+
+@media (prefers-reduced-motion:reduce){.alvo,.pulse{animation:none}.alvo{outline:3px solid var(--brand-lum)}}
+@media (max-width:1100px){.palco{grid-template-columns:1fr}.phone{margin:0 auto}}
+@media (max-width:800px){.layout{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--border);max-height:220px}.main{padding:16px}.obs .docks{grid-template-columns:1fr 1fr;height:auto}.obs .vis{grid-template-columns:1fr}.pc{height:auto;min-height:600px}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">FM</div>
+  <div><h1>OBS Cam Mobile | simulação do fluxo</h1><div class="sub">Do PC zerado até a câmera do iPhone no ar no OBS, pelo cabo</div></div>
+</header>
+<div class="layout">
+  <nav class="side" id="side" aria-label="Passos"></nav>
+  <main class="main">
+    <section class="guia" id="guia"></section>
+    <section class="palco">
+      <div><div class="legenda">iPhone</div><div class="phone" id="phone"></div></div>
+      <div style="min-width:0"><div class="legenda">PC Windows da transmissão</div><div class="pc" id="pc"></div></div>
+    </section>
+    <section class="log" id="log" aria-live="polite"><div class="h">O que acontece por baixo</div></section>
+  </main>
+</div>
+<script>
+const FASES = ['Preparar o PC (uma vez)', 'Preparar o iPhone (uma vez)', 'Ligar no OBS', 'No ar', 'Imprevistos e manutenção'];
+const PASSOS = [
+  {id:'store', fase:0, titulo:'Instalar o Apple Devices', texto:'É o app oficial da Apple na Microsoft Store. Ele traz o serviço que deixa o Windows enxergar o iPhone pelo cabo. Sem ele, só o modo Wi-Fi funciona.', dica:'Clique em "Obter" na Microsoft Store.'},
+  {id:'instalador', fase:0, titulo:'Instalar a extensão OBS Cam Mobile no OBS', texto:'O instalador confere se o OBS e o Apple Devices estão no PC e copia a extensão para a pasta de plugins do OBS. O OBS precisa estar fechado.', dica:'Clique em "Instalar" e depois em "Concluir".'},
+  {id:'confiar', fase:1, titulo:'Ligar o iPhone no cabo e confiar no PC', texto:'Na primeira vez que o iPhone encosta neste PC, ele pergunta se confia. É isso que libera a conversa pelo cabo.', dica:'No iPhone, toque em "Confiar".'},
+  {id:'iloader', fase:1, titulo:'Instalar o SideStore pelo iloader', texto:'O iloader roda no PC uma vez só. Ele instala o SideStore e grava no iPhone o arquivo de pareamento, assinado com o Apple ID grátis da empresa. Depois disso o PC não é mais necessário para renovar.', dica:'Clique em "Instalar SideStore".'},
+  {id:'devmode', fase:1, titulo:'Ligar o Modo de desenvolvedor', texto:'O iOS exige essa chave para abrir apps instalados fora da App Store. Liga uma vez e o iPhone reinicia.', dica:'Ligue a chave, toque em "Reiniciar" e depois em "Ligar".'},
+  {id:'sidestore', fase:1, titulo:'Instalar o OBS Cam Mobile pelo SideStore', texto:'Com o LocalDevVPN ligado, o SideStore assina e instala o nosso app no próprio iPhone. A assinatura grátis vale 7 dias.', dica:'Ligue o LocalDevVPN e toque em "Instalar" no OBS Cam Mobile.'},
+  {id:'permissao', fase:1, titulo:'Abrir o app e liberar a câmera', texto:'Na primeira abertura o iOS pede permissão de câmera. O app mantém a tela acesa enquanto estiver aberto.', dica:'Toque no ícone do OBS Cam Mobile e depois em "Permitir".'},
+  {id:'fonte', fase:2, titulo:'Adicionar a fonte OBS Cam Mobile na cena', texto:'O app já está esperando o OBS no cabo. No OBS, a câmera entra como uma fonte normal, igual a qualquer outra.', dica:'No quadro "Fontes", clique em "+" e escolha "OBS Cam Mobile".'},
+  {id:'props', fase:2, titulo:'Escolher o iPhone e a predefinição', texto:'A extensão lista primeiro os iPhones no cabo e depois os do Wi-Fi. A predefinição já vem pronta para transmissão: 1080p, 30 quadros, lente grande-angular.', dica:'Confira o aparelho e clique em "OK".'},
+  {id:'conectado', fase:2, titulo:'Câmera conectada', texto:'Compare o relógio do iPhone com o do OBS: a diferença é o atraso. A meta é ficar perto de 70 ms no cabo, igual ao DroidCam.', dica:'Clique em "Próximo" quando quiser seguir.'},
+  {id:'noar', fase:3, titulo:'Levar a cena para o ar', texto:'Quando a cena com a câmera vai para o programa, a extensão avisa o iPhone, que mostra "NO AR" e borda vermelha. Assim quem está no palco sabe qual câmera está valendo.', dica:'Clique em "Transição" no OBS.'},
+  {id:'travas', fase:3, titulo:'Ajustar lente e travar a imagem pelo OBS', texto:'Pelo painel OBS Cam Mobile dentro do OBS dá para trocar a lente e travar foco e exposição, sem encostar no iPhone que está no tripé.', dica:'Experimente os botões do painel "OBS Cam Mobile" e depois clique em "Próximo".'},
+  {id:'cabo', fase:4, titulo:'O cabo saiu no meio da live', texto:'A fonte segura a última imagem com um aviso, em vez de ficar preta, e volta sozinha quando o cabo volta. Ninguém precisa mexer no OBS.', dica:'Clique em "Simular: puxar o cabo" e depois em "Recolocar o cabo".'},
+  {id:'renovar', fase:4, titulo:'Renovar a assinatura antes de vencer', texto:'A assinatura grátis vence a cada 7 dias. Rotina: um dia antes de cada transmissão, abrir o SideStore com o LocalDevVPN ligado e tocar em "Renovar". Não precisa de PC.', dica:'Toque em "Renovar" no SideStore.'},
+  {id:'fim', fase:4, titulo:'Pronto', texto:'Esse é o fluxo completo. Do lado do PC é só instalar duas coisas uma vez. Do lado do iPhone, a configuração inicial leva uns 10 minutos e depois é só renovar toda semana.', dica:'Clique em "Recomeçar" para ver de novo.'},
+];
+const idx = id => PASSOS.findIndex(p => p.id === id);
+let atual = 0, sub = 0, timers = [];
+const st = {lente:'1x', ae:false, af:false, cabo:true, menu:false};
+const $ = s => document.querySelector(s);
+
+function limpaTimers(){ timers.forEach(clearTimeout); timers = []; }
+function depois(ms, fn){ timers.push(setTimeout(fn, ms)); }
+function hora(){ const d = new Date(); return d.toTimeString().slice(0,8); }
+function log(txt, cls=''){ const el = $('#log'); el.insertAdjacentHTML('beforeend', `<div><span class="t">${hora()}</span> <span class="${cls}">${txt}</span></div>`); el.scrollTop = el.scrollHeight; }
+
+function ir(i){
+  limpaTimers();
+  atual = Math.max(0, Math.min(PASSOS.length-1, i)); sub = 0;
+  st.menu = false; st.cabo = true;
+  if (atual < idx('travas')) { st.lente='1x'; st.ae=false; st.af=false; }
+  aoEntrar(PASSOS[atual].id);
+  render();
+}
+function proximo(){ ir(atual+1); }
+function setSub(n){ sub = n; render(); }
+
+function aoEntrar(id){
+  const L = {
+    store:()=>log('Windows: sem serviço de USB da Apple. iPhone no cabo ainda é invisível para o PC.','w'),
+    instalador:()=>log('Apple Devices instalado: serviço "Apple Mobile Device" rodando.','ok'),
+    confiar:()=>log('usbmuxd: iPhone detectado no cabo, aguardando "Confiar".'),
+    iloader:()=>log('iPhone pareado com este PC.','ok'),
+    devmode:()=>log('SideStore instalado, arquivo de pareamento gravado no iPhone.','ok'),
+    sidestore:()=>log('Modo de desenvolvedor ligado.','ok'),
+    permissao:()=>log('OBS Cam Mobile instalado. Assinatura válida até daqui a 7 dias.','ok'),
+    fonte:()=>{log('OBS Cam Mobile: servidor TCP aberto na porta <span class="k">4848</span>.');log('Bonjour: anunciando <span class="k">_fmappcam._tcp</span> no Wi-Fi (modo reserva).');},
+    props:()=>log('Extensão: procurando aparelhos (cabo primeiro, depois Wi-Fi)...'),
+    conectado:()=>{},
+    noar:()=>{},
+    travas:()=>{},
+    cabo:()=>{},
+    renovar:()=>log('SideStore: OBS Cam Mobile vence em 1 dia.','w'),
+    fim:()=>log('Simulação concluída.','ok'),
+  };
+  (L[id]||(()=>{}))();
+}
+
+/* ---------- telas do iPhone ---------- */
+const sbar = (escuro=true) => `<div class="notch"></div><div class="sb"><span>9:41</span><span>5G 87%</span></div>`;
+const feed = (rot='', cong=false) => `<div class="feed ${cong?'congelado':''}"><div class="luz" style="left:5%"></div><div class="luz" style="right:5%"></div><div class="pessoa"></div><div class="pulpito"></div><div class="tc" data-tc="${rot}">00:00:00.000</div></div>`;
+const alerta = (t, s, b1, b2, a1, a2) => `<div class="alerta-ios"><div class="box"><div class="tx"><b>${t}</b><small>${s}</small></div><div class="bts"><button data-act="${a1||''}">${b1}</button><button data-act="${a2||''}" class="${a2?'alvo':''}">${b2}</button></div></div></div>`;
+const homeTela = (alvoFm) => `<div class="tela ios-bg">${sbar()}<div class="home">
+  <button class="app app-x"><i>Fotos</i>Fotos</button><button class="app app-x"><i>Ajus</i>Ajustes</button>
+  <button class="app app-ss"><i>SS</i>SideStore</button><button class="app app-x"><i>VPN</i>LocalDevVPN</button>
+  <button class="app app-fm ${alvoFm?'alvo':''}" data-act="${alvoFm?'abrirFm':''}" style="border-radius:13px"><i>Cam</i>OBS Cam Mobile</button></div></div>`;
+const sideStore = (vpn, item) => `<div class="tela ios-list sstore">${sbar()}<div class="ios-h">SideStore</div>
+  <div class="ios-group"><div class="ios-row"><span>LocalDevVPN</span><button class="tog ${vpn?'on':''} ${!vpn?'alvo':''}" data-act="${!vpn?'vpn':''}" aria-label="LocalDevVPN"></button></div></div>
+  <div class="ios-foot">Precisa estar ligado para instalar e renovar.</div>${item}</div>`;
+
+function telaPhone(){
+  const id = PASSOS[atual].id;
+  const lente = st.lente==='0.5x'?'ultra-angular':st.lente==='2x'?'teleobjetiva':'grande-angular';
+  const camAtiva = (rotulo, extra='') => `<div class="cam">${feed('iphone', !st.cabo && false)}</div>${sbar()}${extra}
+    ${st.ae||st.af?`<div class="locks">${st.ae?'<span>AE travada</span>':''}${st.af?'<span>AF travado</span>':''}</div>`:''}
+    <div class="cam-hud"><div class="l1"><span>${rotulo}</span><span>${st.lente}</span></div><div class="l2">1080p 30 qps, H.264 10 Mbps, ${lente}<br>Bateria 100% (carregando), 38 °C</div></div>`;
+  switch(id){
+    case 'store': case 'instalador':
+      return `<div class="tela ios-bg">${sbar()}<div class="estado"><div style="font-size:44px;font-weight:800">9:41</div><div style="color:#c7c7cc">O iPhone ainda não entra na história.</div></div></div>`;
+    case 'confiar':
+      if (sub===0) return `<div class="tela ios-bg">${sbar()}<div class="estado"><div style="font-size:44px;font-weight:800">9:41</div></div></div>${alerta('Confiar neste computador?','Seus ajustes e dados poderão ser acessados por este computador quando conectados.','Não Confiar','Confiar','','confiar')}`;
+      return `<div class="tela ios-bg">${sbar()}<div class="estado"><b>Digite o código</b><div style="letter-spacing:12px;font-size:22px">••••••</div><small style="color:#8e8e93">para confirmar a confiança</small></div></div>`;
+    case 'iloader':
+      return `<div class="tela ios-bg">${sbar()}<div class="estado"><div class="dot pulse" style="background:${sub===2?'#34c759':'#0a84ff'}"></div><div>${sub===2?'SideStore instalado':'Recebendo dados do PC...'}</div></div></div>`;
+    case 'devmode':
+      if (sub===2) return `<div class="tela" style="background:#000">${sbar()}<div class="estado"><div class="dot pulse" style="background:#fff"></div><div>Reiniciando...</div></div></div>`;
+      return `<div class="tela ios-list">${sbar()}<div class="ios-h" style="font-size:22px">Privacidade e Segurança</div>
+        <div class="ios-group"><div class="ios-row"><span>Modo de desenvolvedor</span><button class="tog ${sub>=1?'on':''} ${sub===0?'alvo':''}" data-act="${sub===0?'devtog':''}" aria-label="Modo de desenvolvedor"></button></div></div>
+        <div class="ios-foot">Necessário para abrir apps instalados pelo SideStore.</div></div>
+        ${sub===1?alerta('Ligar o Modo de desenvolvedor','O iPhone precisa reiniciar para ligar este modo.','Cancelar','Reiniciar','','reiniciar'):''}
+        ${sub===3?alerta('Ligar o Modo de desenvolvedor?','Ligar reduz a segurança do aparelho.','Cancelar','Ligar','','devok'):''}`;
+    case 'sidestore': {
+      const vpn = sub>=1;
+      const item = sub===2 ? `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small>Assinando e instalando...</small></div><span class="dot pulse" style="background:#0a84ff"></span></div>`
+        : sub===3 ? `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small>Vence em 7 dias</small></div><span style="color:#34c759;font-weight:800;font-size:13px">Instalado</span></div>`
+        : `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small>OBSCamMobile.ipa, versão 1.0</small></div><button class="pill-ios ${vpn?'alvo':''}" data-act="${vpn?'instalarIpa':''}" ${vpn?'':'disabled style="opacity:.4"'}>Instalar</button></div>`;
+      return sideStore(vpn, item);
+    }
+    case 'permissao':
+      if (sub===0) return homeTela(true);
+      return `<div class="tela" style="background:#000">${sbar()}</div>${alerta('"OBS Cam Mobile" quer acessar a Câmera','A câmera é usada para enviar o vídeo para o OBS.','Não Permitir','Permitir','','permitir')}`;
+    case 'fonte': case 'props':
+      return `<div class="tela" style="background:#000">${sbar()}<div class="estado">
+        <div style="width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum));display:grid;place-items:center;font-weight:800">Cam</div>
+        <b style="font-size:18px">${id==='props'&&sub===1?'Conectando ao OBS...':'Aguardando o OBS'}</b>
+        <div style="display:flex;gap:8px;align-items:center;color:#d1d1d6;font-size:13.5px"><span class="dot" style="background:#34c759"></span>Cabo USB conectado</div>
+        <div style="color:#8e8e93;font-size:12.5px">iPhone de Testes, porta 4848<br>Wi-Fi também disponível</div></div></div>`;
+    case 'conectado': return camAtiva('Conectado ao OBS');
+    case 'noar': return sub>=1 ? camAtiva('No ar', '<div class="noar-tag">NO AR</div>') : camAtiva('Conectado ao OBS');
+    case 'travas': return camAtiva('No ar', '<div class="noar-tag">NO AR</div>');
+    case 'cabo':
+      if (sub===1) return `<div class="tela" style="background:#000">${sbar()}<div class="estado"><span class="dot" style="background:var(--warn);width:16px;height:16px"></span><b>Cabo desconectado</b><div style="color:#c7c7cc;font-size:13px">Ligue o cabo de novo. A câmera volta para o OBS sozinha.</div></div></div>`;
+      return camAtiva('No ar', '<div class="noar-tag">NO AR</div>');
+    case 'renovar': {
+      const item = sub===0 ? `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small style="color:var(--warn)">Vence em 1 dia</small></div><button class="pill-ios amber alvo" data-act="renovar">Renovar</button></div>`
+        : sub===1 ? `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small>Renovando...</small></div><span class="dot pulse" style="background:#0a84ff"></span></div>`
+        : `<div class="item"><i style="background:linear-gradient(135deg,var(--brand-deep),var(--brand-lum))">Cam</i><div class="t">OBS Cam Mobile<small>Vence em 7 dias</small></div><span style="color:#34c759;font-weight:800;font-size:13px">Renovado</span></div>`;
+      return sideStore(true, item);
+    }
+    case 'fim': return homeTela(false);
+  }
+}
+
+/* ---------- telas do PC ---------- */
+const win = (t, bd) => `<div class="win"><div class="tb"><span>${t}</span><span class="ctl">_ □ ✕</span></div><div class="bd">${bd}</div></div>`;
+const desk = (inner, apps='') => `<div class="desk">${inner}</div><div class="taskbar"><span>Iniciar</span>${apps}</div>`;
+const chk = (s, t) => `<div class="check"><span class="s ${s}">${s==='ok'?'✓':s==='no'?'!':''}</span>${t}</div>`;
+
+function obs(opts={}){
+  const {fonte=false, conectado=false, programa=false, dlg='', menu=false, painel=false, aviso=''} = opts;
+  const prev = conectado ? `${feed('obs', !!aviso)}${aviso?`<div class="aviso-src">${aviso}</div>`:''}` : `<div class="vazio">${fonte?'Sem sinal':'Cena vazia'}</div>`;
+  const prog = programa ? feed('obs2', !!aviso) : `<div class="vazio">Programa</div>`;
+  return `<div class="obs"><div class="tb">OBS Studio 31.1 | Perfil: FM Conecta | Cena: Culto</div>
+    <div class="vis"><div class="tela-obs">${prev}<div class="rot">Pré-visualização</div></div><div class="tela-obs">${prog}<div class="rot">Programa</div></div></div>
+    <div class="docks">
+      <div class="dock"><h5>Cenas</h5><div class="li sel">Culto</div><div class="li">Abertura</div><div class="li">Encerramento</div></div>
+      <div class="dock" style="position:relative"><h5>Fontes</h5>${fonte?`<div class="li sel"><span>iPhone palco (OBS Cam Mobile)</span><span>${conectado?(aviso?'<span style="color:var(--warn)">●</span>':'<span style="color:var(--ok)">●</span>'):'○'}</span></div>`:''}<div class="li">Logo FM</div><div class="li">Áudio da mesa</div>
+        <div class="ft"><button class="${!fonte&&!menu?'alvo':''}" data-act="${!fonte?'maisFonte':''}" aria-label="Adicionar fonte">+</button><button>−</button><button>⚙</button></div>
+        ${menu?`<div class="menu" style="left:8px;bottom:34px"><div>Captura de janela</div><div>Dispositivo de captura de vídeo</div><div>Fonte de mídia</div><div>Navegador</div><button class="hi alvo" data-act="escolheFonte">OBS Cam Mobile (iPhone)</button><div>Imagem</div></div>`:''}</div>
+      <div class="dock">${painel?`<h5>OBS Cam Mobile: iPhone palco</h5><div class="bt">
+          ${['0.5x','1x','2x'].map(l=>`<button class="${st.lente===l?'on':''}" data-act="lente:${l}">${l}</button>`).join('')}
+          <button class="${st.ae?'on':''}" data-act="ae">Travar exposição</button><button class="${st.af?'on':''}" data-act="af">Travar foco</button></div>
+          <div style="padding:0 8px;font-size:11.5px;color:#aaa">Atraso <b data-lat style="color:#fff">72 ms</b> | 30 qps | cabo USB</div>`
+        :`<h5>Controles</h5><div class="bt"><button class="${opts.alvoTrans?'alvo':''}" data-act="${opts.alvoTrans?'transicao':''}">Transição</button><button>Iniciar transmissão</button><button>Iniciar gravação</button></div>`}</div>
+    </div>${dlg}</div>`;
+}
+
+function telaPc(){
+  const id = PASSOS[atual].id;
+  switch(id){
+    case 'store':
+      return desk(win('Microsoft Store', `<div class="ms-card"><i>Apple</i><div><h4>Apple Devices</h4><p>Apple Inc. | Gratuito<br>Gerencie e sincronize iPhone e iPad com o PC.</p>
+        ${sub===0?`<button class="wbtn pri alvo" data-act="obterStore">Obter</button>`:sub===1?`<div class="barra"><i id="bar"></i></div><small style="color:#bbb">Baixando e instalando...</small>`:`<button class="wbtn">Abrir</button> <span style="color:var(--ok);font-weight:700;margin-left:8px">Instalado</span>`}</div></div>`), '<span>Microsoft Store</span>');
+    case 'instalador': {
+      const bd = sub===0 ? `<h4>Instalar OBS Cam Mobile para OBS</h4><p>Versão 1.0.0 | extensão de câmera do iPhone para o OBS Studio.</p>
+          ${chk('ok','OBS Studio 31.1 encontrado')}${chk('ok','Apple Devices encontrado (serviço USB rodando)')}${chk('ok','OBS está fechado')}
+          <div class="wrow"><button class="wbtn">Cancelar</button><button class="wbtn pri alvo" data-act="instalar">Instalar</button></div>`
+        : sub===1 ? `<h4>Instalando...</h4><p>Copiando para C:\\ProgramData\\obs-studio\\plugins\\fm-appcam</p><div class="barra"><i id="bar"></i></div>`
+        : `<h4>OBS Cam Mobile instalado</h4><p>Abra o OBS e adicione a fonte "OBS Cam Mobile" na cena.</p>${chk('ok','Extensão copiada')}${chk('ok','Teste de carga no OBS 31.1 passou')}
+          <div class="wrow"><button class="wbtn pri alvo" data-act="next">Concluir</button></div>`;
+      return desk(win('Instalador OBS Cam Mobile', bd), '<span>FMAppCam-Setup.exe</span>');
+    }
+    case 'confiar':
+      return desk(win('Apple Devices', `<h4>${sub===0?'Desbloqueie o iPhone e toque em "Confiar"':'iPhone de Testes conectado'}</h4><p>${sub===0?'Aguardando a confirmação no aparelho.':'iOS 26.1 | cabo USB'}</p>${sub===0?chk('wt','Aguardando confiança'):chk('ok','Pareado com este PC')}`), '<span>Apple Devices</span>');
+    case 'iloader': {
+      const bd = sub===0 ? `<h4>iloader</h4><p>iPhone de Testes detectado no cabo.</p>
+          <div class="campo">Apple ID usado para assinar (exemplo)<input value="appcam.exemplo@icloud.com" aria-label="Apple ID"></div>
+          <div class="campo">O que instalar<select aria-label="App"><option>SideStore + arquivo de pareamento</option><option>LiveContainer + SideStore</option></select></div>
+          <div class="wrow"><button class="wbtn pri alvo" data-act="iloader">Instalar SideStore</button></div>`
+        : sub===1 ? `<h4>Instalando...</h4><div class="barra"><i id="bar"></i></div><p id="ilstep">Gerando arquivo de pareamento</p>`
+        : `<h4>Pronto</h4>${chk('ok','SideStore instalado')}${chk('ok','Arquivo de pareamento gravado')}<p style="margin-top:8px">Pode desligar o cabo. Daqui pra frente o iPhone renova sozinho.</p><div class="wrow"><button class="wbtn pri alvo" data-act="next">Concluir</button></div>`;
+      return desk(win('iloader', bd), '<span>iloader</span>');
+    }
+    case 'devmode': case 'sidestore': case 'permissao':
+      return desk(`<div style="color:#9fb3d1;text-align:center;max-width:320px">Nada a fazer no PC agora. O resto da preparação do iPhone acontece no próprio aparelho.</div>`);
+    case 'fonte':
+      return obs({menu:st.menu});
+    case 'props': {
+      const dlg = `<div class="dlg">${win('Propriedades de "iPhone palco"', `<div class="prev">${sub===1?`<div class="vazio">Conectando...</div>`:`<div class="vazio">Sem sinal</div>`}</div>
+        <div class="campo">Aparelho<select aria-label="Aparelho"><option>iPhone de Testes (cabo USB)</option><option>iPhone 12 do som (Wi-Fi)</option></select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="campo">Predefinição<select aria-label="Predefinição"><option>Transmissão 1080p 30 qps</option><option>Movimento 1080p 60 qps</option><option>Leve 720p 60 qps</option></select></div>
+        <div class="campo">Lente<select aria-label="Lente"><option>Grande-angular (1x)</option><option>Ultra-angular (0.5x)</option><option>Teleobjetiva (2x)</option></select></div></div>
+        <label class="chk"><input type="checkbox"> Travar foco e exposição ao conectar</label><label class="chk"><input type="checkbox"> Espelhar imagem</label>
+        <div class="wrow"><button class="wbtn">Cancelar</button><button class="wbtn pri ${sub===0?'alvo':''}" data-act="${sub===0?'ok':''}">OK</button></div>`)}</div>`;
+      return obs({fonte:true, dlg});
+    }
+    case 'conectado': return obs({fonte:true, conectado:true});
+    case 'noar': return obs({fonte:true, conectado:true, programa:sub>=1, alvoTrans:sub===0});
+    case 'travas': return obs({fonte:true, conectado:true, programa:true, painel:true});
+    case 'cabo': {
+      const aviso = sub===1 ? 'Reconectando... última imagem mantida' : '';
+      return obs({fonte:true, conectado:true, programa:true, painel:true, aviso});
+    }
+    case 'renovar': case 'fim':
+      return obs({fonte:true, conectado:true, programa:true, painel:true});
+  }
+}
+
+/* ---------- ações ---------- */
+function barra(ms, fim, passos){
+  const b = document.getElementById('bar'); if (!b) return;
+  requestAnimationFrame(()=>{ b.style.transition = `width ${ms}ms linear`; b.style.width = '100%'; });
+  (passos||[]).forEach(([t, txt, cls]) => depois(t, ()=>{ log(txt, cls); const s = document.getElementById('ilstep'); if (s) s.textContent = txt; }));
+  depois(ms+150, fim);
+}
+const ACOES = {
+  next: proximo,
+  obterStore(){ setSub(1); barra(1600, ()=>{ setSub(2); log('Serviço "Apple Mobile Device" instalado e iniciado.','ok'); depois(900, proximo); }); },
+  instalar(){ setSub(1); barra(1400, ()=>{ setSub(2); log('fm-appcam.dll copiada. OBS 31.1 carregou a extensão no teste.','ok'); }); },
+  confiar(){ setSub(1); log('iPhone: "Confiar" tocado, pedindo código.'); depois(1200, ()=>{ log('Pareamento PC e iPhone concluído.','ok'); setSub(2); depois(900, proximo); }); },
+  iloader(){ setSub(1); barra(2600, ()=>setSub(2), [[200,'Entrando com o Apple ID grátis'],[800,'Gerando arquivo de pareamento'],[1500,'Assinando SideStore (vale 7 dias)'],[2100,'Instalando SideStore no iPhone']]); },
+  devtog(){ setSub(1); },
+  reiniciar(){ setSub(2); log('iPhone reiniciando...'); depois(1600, ()=>setSub(3)); },
+  devok(){ log('Modo de desenvolvedor confirmado.','ok'); proximo(); },
+  vpn(){ setSub(1); log('LocalDevVPN ligado (túnel local, nada sai do aparelho).'); },
+  instalarIpa(){ setSub(2); log('SideStore: assinando OBSCamMobile.ipa com o Apple ID grátis...'); depois(1800, ()=>{ setSub(3); log('OBS Cam Mobile instalado.','ok'); depois(1000, proximo); }); },
+  abrirFm(){ setSub(1); },
+  permitir(){ log('Câmera liberada. Tela travada acesa enquanto o app estiver aberto.','ok'); proximo(); },
+  maisFonte(){ st.menu = true; render(); },
+  escolheFonte(){ st.menu = false; log('OBS: fonte "iPhone palco" criada com o tipo OBS Cam Mobile.'); proximo(); },
+  ok(){
+    setSub(1);
+    log('usbmuxd: abrindo túnel para a porta 4848 do iPhone de Testes (cabo).');
+    depois(500, ()=>log('OBS → iPhone: <span class="k">{"v":1,"preset":"1080p30","lente":"wide","bitrate":10000000}</span>'));
+    depois(1000, ()=>log('iPhone → OBS: <span class="k">{"ok":true,"aparelho":"iPhone de Testes","w":1920,"h":1080,"fps":30}</span>'));
+    depois(1400, ()=>log('Pacote tipo 1 (configuração H.264) recebido. Decodificador pronto (placa de vídeo).','ok'));
+    depois(1800, ()=>{ log('Quadros chegando. Fonte em modo sem fila. Atraso medido: 72 ms.','ok'); proximo(); });
+  },
+  transicao(){ setSub(1); log('Cena "Culto" no programa. Pacote tipo 4 enviado: <span class="k">{"noar":true}</span>'); log('iPhone: borda vermelha e "NO AR" ligados.','ok'); depois(1400, proximo); },
+  ae(){ st.ae=!st.ae; log(`Pacote tipo 4: <span class="k">{"travarExposicao":${st.ae}}</span>`); render(); },
+  af(){ st.af=!st.af; log(`Pacote tipo 4: <span class="k">{"travarFoco":${st.af}}</span>`); render(); },
+  puxar(){ st.cabo=false; setSub(1); log('Conexão perdida (cabo). Fonte segura a última imagem e tenta de novo a cada 1 s.','w'); },
+  recolocar(){ log('usbmuxd: iPhone de volta. Refazendo handshake...'); depois(900, ()=>{ st.cabo=true; setSub(2); log('Imagem voltou em 0,9 s, sem mexer no OBS.','ok'); }); },
+  renovar(){ setSub(1); log('SideStore: renovando assinatura pelo LocalDevVPN...'); depois(1500, ()=>{ setSub(2); log('OBS Cam Mobile renovado: vale mais 7 dias.','ok'); }); },
+  recomecar(){ $('#log').innerHTML = '<div class="h">O que acontece por baixo</div>'; st.lente='1x'; st.ae=false; st.af=false; ir(0); },
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act; if (!a) return;
+  if (a.startsWith('lente:')) { st.lente = a.slice(6); log(`Pacote tipo 4: <span class="k">{"lente":"${st.lente}"}</span>`); render(); return; }
+  if (a.startsWith('ir:')) { ir(+a.slice(3)); return; }
+  ACOES[a] && ACOES[a]();
+});
+
+/* ---------- render ---------- */
+function render(){
+  const p = PASSOS[atual];
+  $('#side').innerHTML = FASES.map((f, fi) => `<div class="fase"><h3>${f}</h3>${PASSOS.map((q, i) => q.fase!==fi ? '' :
+    `<button class="passo ${i<atual?'feito':''} ${i===atual?'atual':''}" data-act="ir:${i}" ${i===atual?'aria-current="step"':''}><span class="n">${i<atual?'✓':i+1}</span>${q.titulo}</button>`).join('')}</div>`).join('');
+  let extra = '';
+  if (p.id==='cabo') extra = sub===1 ? `<button class="btn pri" data-act="recolocar">Recolocar o cabo</button>` : sub===0 ? `<button class="btn warn" data-act="puxar">Simular: puxar o cabo</button>` : '';
+  const podeAvancar = ['conectado','travas','fim'].includes(p.id) || (p.id==='cabo'&&sub===2) || (p.id==='renovar'&&sub===2);
+  $('#guia').innerHTML = `<div><div class="tag">Fase ${p.fase+1}: ${FASES[p.fase]} | passo ${atual+1} de ${PASSOS.length}</div><h2>${p.titulo}</h2><p>${p.texto}</p><div class="dica">${p.dica}</div></div>
+    <div class="nav">${extra}<button class="btn" data-act="ir:${atual-1}" ${atual===0?'disabled':''}>Voltar</button>
+    ${p.id==='fim'?`<button class="btn pri" data-act="recomecar">Recomeçar</button>`:`<button class="btn ${podeAvancar?'pri':''}" data-act="next">${podeAvancar?'Próximo':'Pular passo'}</button>`}</div>`;
+  const ph = $('#phone'); ph.innerHTML = telaPhone();
+  ph.classList.toggle('noar', (p.id==='noar'&&sub>=1) || (['travas','cabo'].includes(p.id) && !(p.id==='cabo'&&sub===1)));
+  $('#pc').innerHTML = telaPc();
+}
+
+/* relógios: o do OBS fica 72 ms atrás, o congelado para */
+let congeladoEm = null;
+function tick(){
+  const agora = performance.now();
+  const fmt = ms => { const d = new Date(Date.now() - (performance.now()-ms)); return d.toTimeString().slice(0,8)+'.'+String(d.getMilliseconds()).padStart(3,'0'); };
+  const parado = PASSOS[atual].id==='cabo' && sub===1;
+  if (parado && congeladoEm===null) congeladoEm = agora - 72;
+  if (!parado) congeladoEm = null;
+  document.querySelectorAll('[data-tc]').forEach(el => {
+    const ehObs = el.dataset.tc.startsWith('obs');
+    el.textContent = fmt(ehObs ? (parado ? congeladoEm : agora - 72) : agora);
+  });
+  requestAnimationFrame(tick);
+}
+ir(0); tick();
+</script>
+</body>
+</html>

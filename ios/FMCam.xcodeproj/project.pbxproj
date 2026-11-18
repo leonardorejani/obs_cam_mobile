@@ -1,0 +1,487 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBAEB9013862236B5A0833C /* ServidorTests.swift */; };
+		0B66CD9981A2EA2230C9C8DD /* Tela.swift in Sources */ = {isa = PBXBuildFile; fileRef = A284DB0EB7667CCA2B6D5653 /* Tela.swift */; };
+		1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39E7EF3D2A5A1030227D271 /* Rede.swift */; };
+		304E027475678F9DA466CCED /* Codificador.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB92C044A569ACCACF1CAD76 /* Codificador.swift */; };
+		40ADDA3BD5F9D3E9EBAC7E79 /* Nivel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B028AEC3D81C0C9DEE333A07 /* Nivel.swift */; };
+		5BB595A3594D5D91A083E513 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 439593434EDE25BC619EB9AA /* Assets.xcassets */; };
+		62220B2BCEF229BF4CEBA0B9 /* QualidadeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385659F9A9C1D145E033907F /* QualidadeTests.swift */; };
+		65A67C9F475CBE7BBE7F93F2 /* CodificadorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A18269CD5884510D562316 /* CodificadorTests.swift */; };
+		70B103C590DC18F0EB93D615 /* DiasParaVencer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */; };
+		7A59B6781DC46BDB6D776E60 /* Assinatura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F71342E42F05D96F9EA1F66 /* Assinatura.swift */; };
+		7A953A89262C817718A81945 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF411A1ABCB64F79EA2C50 /* App.swift */; };
+		80EF6722C8EF5FD15A306008 /* CicloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B714FB3E2C8F5EDC41982287 /* CicloTests.swift */; };
+		873D40C1D6F86EEC59A5DE60 /* Preferencias.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FEB3328B9DA5729D6889ACF /* Preferencias.swift */; };
+		92A45C34754A8A67CD2C5557 /* NomeCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E275455C86C09007A24FE7B /* NomeCameraTests.swift */; };
+		94E0D15D921D9254ACC4FA32 /* Ciclo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255D03ED05585575E716487C /* Ciclo.swift */; };
+		956FBEA6CA7650BC3EBD5FBB /* Captura.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0F60DDD047A249EB8E556E /* Captura.swift */; };
+		9F8D0FDA656BF187F8263433 /* RecursosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652E88463C6B08966DEE6C63 /* RecursosTests.swift */; };
+		A60ACA811638DC148929CA8B /* Ajustes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 125EED2E54A21FFB865A3DE9 /* Ajustes.swift */; };
+		B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01EEFF212AE9821838E695 /* RobustezTests.swift */; };
+		B4260BC44A6B248A826CA59E /* Protocolo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */; };
+		E7857DED2B04D6F2CF238AB4 /* Servidor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E74AF1371EA7D49A5B73C56 /* Servidor.swift */; };
+		ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */; };
+		F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1C61C8EA18528B58A85C9A3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 60728F7A83D5BD17B9952EE9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FD80E23E4D292075DC4849DD;
+			remoteInfo = FMCam;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocoloTests.swift; sourceTree = "<group>"; };
+		125EED2E54A21FFB865A3DE9 /* Ajustes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ajustes.swift; sourceTree = "<group>"; };
+		195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiasParaVencer.swift; sourceTree = "<group>"; };
+		255D03ED05585575E716487C /* Ciclo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ciclo.swift; sourceTree = "<group>"; };
+		385659F9A9C1D145E033907F /* QualidadeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualidadeTests.swift; sourceTree = "<group>"; };
+		3E275455C86C09007A24FE7B /* NomeCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NomeCameraTests.swift; sourceTree = "<group>"; };
+		3F71342E42F05D96F9EA1F66 /* Assinatura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assinatura.swift; sourceTree = "<group>"; };
+		439593434EDE25BC619EB9AA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		652E88463C6B08966DEE6C63 /* RecursosTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecursosTests.swift; sourceTree = "<group>"; };
+		7E74AF1371EA7D49A5B73C56 /* Servidor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Servidor.swift; sourceTree = "<group>"; };
+		827CD114D1FDC00D88C5D9F2 /* FMCamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FMCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8FEB3328B9DA5729D6889ACF /* Preferencias.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferencias.swift; sourceTree = "<group>"; };
+		910BC902D9BF7F5D8299C44D /* FMCam.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FMCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A284DB0EB7667CCA2B6D5653 /* Tela.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tela.swift; sourceTree = "<group>"; };
+		AFBAEB9013862236B5A0833C /* ServidorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServidorTests.swift; sourceTree = "<group>"; };
+		B028AEC3D81C0C9DEE333A07 /* Nivel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Nivel.swift; sourceTree = "<group>"; };
+		B714FB3E2C8F5EDC41982287 /* CicloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CicloTests.swift; sourceTree = "<group>"; };
+		BF01EEFF212AE9821838E695 /* RobustezTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RobustezTests.swift; sourceTree = "<group>"; };
+		CB0F60DDD047A249EB8E556E /* Captura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Captura.swift; sourceTree = "<group>"; };
+		CB92C044A569ACCACF1CAD76 /* Codificador.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codificador.swift; sourceTree = "<group>"; };
+		CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelaLogicaTests.swift; sourceTree = "<group>"; };
+		DDFF411A1ABCB64F79EA2C50 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		E39E7EF3D2A5A1030227D271 /* Rede.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rede.swift; sourceTree = "<group>"; };
+		E7A18269CD5884510D562316 /* CodificadorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodificadorTests.swift; sourceTree = "<group>"; };
+		EC2BD723A01FADB2F7570812 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocolo.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2D92E8ADE3F3DA6BC93B7E7C /* FMCamTests */ = {
+			isa = PBXGroup;
+			children = (
+				B714FB3E2C8F5EDC41982287 /* CicloTests.swift */,
+				E7A18269CD5884510D562316 /* CodificadorTests.swift */,
+				3E275455C86C09007A24FE7B /* NomeCameraTests.swift */,
+				0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */,
+				385659F9A9C1D145E033907F /* QualidadeTests.swift */,
+				652E88463C6B08966DEE6C63 /* RecursosTests.swift */,
+				BF01EEFF212AE9821838E695 /* RobustezTests.swift */,
+				AFBAEB9013862236B5A0833C /* ServidorTests.swift */,
+				CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */,
+			);
+			path = FMCamTests;
+			sourceTree = "<group>";
+		};
+		3FD09194685F1DCA50DDDB1F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				910BC902D9BF7F5D8299C44D /* FMCam.app */,
+				827CD114D1FDC00D88C5D9F2 /* FMCamTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7B02A36BC064ACD5827700D3 = {
+			isa = PBXGroup;
+			children = (
+				B2224423944EDDB219908CC8 /* FMCam */,
+				2D92E8ADE3F3DA6BC93B7E7C /* FMCamTests */,
+				3FD09194685F1DCA50DDDB1F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B2224423944EDDB219908CC8 /* FMCam */ = {
+			isa = PBXGroup;
+			children = (
+				125EED2E54A21FFB865A3DE9 /* Ajustes.swift */,
+				DDFF411A1ABCB64F79EA2C50 /* App.swift */,
+				439593434EDE25BC619EB9AA /* Assets.xcassets */,
+				3F71342E42F05D96F9EA1F66 /* Assinatura.swift */,
+				CB0F60DDD047A249EB8E556E /* Captura.swift */,
+				255D03ED05585575E716487C /* Ciclo.swift */,
+				CB92C044A569ACCACF1CAD76 /* Codificador.swift */,
+				195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */,
+				EC2BD723A01FADB2F7570812 /* Info.plist */,
+				B028AEC3D81C0C9DEE333A07 /* Nivel.swift */,
+				8FEB3328B9DA5729D6889ACF /* Preferencias.swift */,
+				FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */,
+				E39E7EF3D2A5A1030227D271 /* Rede.swift */,
+				7E74AF1371EA7D49A5B73C56 /* Servidor.swift */,
+				A284DB0EB7667CCA2B6D5653 /* Tela.swift */,
+			);
+			path = FMCam;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B355580D9A3C46939DAB5E6A /* FMCamTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EAE0F47A98B4A45F6106A7F9 /* Build configuration list for PBXNativeTarget "FMCamTests" */;
+			buildPhases = (
+				F5F2679BDF6857CA222EA153 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				41D384A07666AA8CFE662F59 /* PBXTargetDependency */,
+			);
+			name = FMCamTests;
+			packageProductDependencies = (
+			);
+			productName = FMCamTests;
+			productReference = 827CD114D1FDC00D88C5D9F2 /* FMCamTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FD80E23E4D292075DC4849DD /* FMCam */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 174EB3370AC834BBBA39896E /* Build configuration list for PBXNativeTarget "FMCam" */;
+			buildPhases = (
+				358F714DCD66DD6E5A148387 /* Sources */,
+				75CA441BDCFD561C76D2D66A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FMCam;
+			packageProductDependencies = (
+			);
+			productName = FMCam;
+			productReference = 910BC902D9BF7F5D8299C44D /* FMCam.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		60728F7A83D5BD17B9952EE9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					FD80E23E4D292075DC4849DD = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 8A053DDA68A1B7FCF5D9F82F /* Build configuration list for PBXProject "FMCam" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7B02A36BC064ACD5827700D3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3FD09194685F1DCA50DDDB1F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FD80E23E4D292075DC4849DD /* FMCam */,
+				B355580D9A3C46939DAB5E6A /* FMCamTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		75CA441BDCFD561C76D2D66A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5BB595A3594D5D91A083E513 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		358F714DCD66DD6E5A148387 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A60ACA811638DC148929CA8B /* Ajustes.swift in Sources */,
+				7A953A89262C817718A81945 /* App.swift in Sources */,
+				7A59B6781DC46BDB6D776E60 /* Assinatura.swift in Sources */,
+				956FBEA6CA7650BC3EBD5FBB /* Captura.swift in Sources */,
+				94E0D15D921D9254ACC4FA32 /* Ciclo.swift in Sources */,
+				304E027475678F9DA466CCED /* Codificador.swift in Sources */,
+				70B103C590DC18F0EB93D615 /* DiasParaVencer.swift in Sources */,
+				40ADDA3BD5F9D3E9EBAC7E79 /* Nivel.swift in Sources */,
+				873D40C1D6F86EEC59A5DE60 /* Preferencias.swift in Sources */,
+				B4260BC44A6B248A826CA59E /* Protocolo.swift in Sources */,
+				1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */,
+				E7857DED2B04D6F2CF238AB4 /* Servidor.swift in Sources */,
+				0B66CD9981A2EA2230C9C8DD /* Tela.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5F2679BDF6857CA222EA153 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				80EF6722C8EF5FD15A306008 /* CicloTests.swift in Sources */,
+				65A67C9F475CBE7BBE7F93F2 /* CodificadorTests.swift in Sources */,
+				92A45C34754A8A67CD2C5557 /* NomeCameraTests.swift in Sources */,
+				F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */,
+				62220B2BCEF229BF4CEBA0B9 /* QualidadeTests.swift in Sources */,
+				9F8D0FDA656BF187F8263433 /* RecursosTests.swift in Sources */,
+				B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */,
+				07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */,
+				ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		41D384A07666AA8CFE662F59 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FD80E23E4D292075DC4849DD /* FMCam */;
+			targetProxy = B1C61C8EA18528B58A85C9A3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		112F521DFD37E19DD85DA30E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		518DD250FE26C8635ADBDA07 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fmrocket.fmcam.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FMCam.app/FMCam";
+			};
+			name = Release;
+		};
+		5450CEF24C9E06B806443ED8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fmrocket.fmcam.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FMCam.app/FMCam";
+			};
+			name = Debug;
+		};
+		A17EB2E169F54C79DF8CFFD5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = FMCam/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fmrocket.fmcam;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A1BF6F77458010AF4D5E6188 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = FMCam/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fmrocket.fmcam;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B243247DC05459EFC42F7E14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		174EB3370AC834BBBA39896E /* Build configuration list for PBXNativeTarget "FMCam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1BF6F77458010AF4D5E6188 /* Debug */,
+				A17EB2E169F54C79DF8CFFD5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8A053DDA68A1B7FCF5D9F82F /* Build configuration list for PBXProject "FMCam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				112F521DFD37E19DD85DA30E /* Debug */,
+				B243247DC05459EFC42F7E14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EAE0F47A98B4A45F6106A7F9 /* Build configuration list for PBXNativeTarget "FMCamTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5450CEF24C9E06B806443ED8 /* Debug */,
+				518DD250FE26C8635ADBDA07 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 60728F7A83D5BD17B9952EE9 /* Project object */;
+}

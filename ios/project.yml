@@ -1,0 +1,51 @@
+name: FMCam
+options:
+  bundleIdPrefix: com.fmrocket
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "2"
+targets:
+  FMCam:
+    type: application
+    platform: iOS
+    sources:
+      - FMCam
+    info:
+      path: FMCam/Info.plist
+      properties:
+        CFBundleDisplayName: OBS Cam Mobile
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "2"
+        UILaunchScreen: {}
+        NSCameraUsageDescription: "O OBS Cam Mobile usa a câmera do iPhone para enviar o vídeo ao OBS pelo cabo."
+        NSBonjourServices:
+          - _fmcam._tcp
+        NSLocalNetworkUsageDescription: "O OBS Cam Mobile recebe a conexão do computador para enviar o vídeo da câmera."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fmrocket.fmcam
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets:
+        - FMCamTests
+  FMCamTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - FMCamTests
+    dependencies:
+      - target: FMCam
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fmrocket.fmcam.tests
+        GENERATE_INFOPLIST_FILE: YES

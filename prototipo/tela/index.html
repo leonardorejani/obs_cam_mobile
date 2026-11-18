@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tela do OBS Cam Mobile: opções | droidcam-iphone-fmconecta</title>
+<style>
+:root{
+  --mod:rgba(18,16,24,.62); --mod-borda:rgba(255,255,255,.08); --txt2:rgba(255,255,255,.62);
+  --amarelo:#FFD60A; --vermelho:#FF453A; --verde:#30D158; --raio:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1c1b22;color:#ececf1;font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;padding:24px 16px 60px}
+main{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1{font-size:20px}
+h2{font-size:17px;display:flex;gap:10px;align-items:baseline}
+h2 .letra{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--amarelo);color:#000;font-size:15px}
+.sub{color:#a6a3b4;font-size:13.5px}
+.opcao{background:#24232b;border:1px solid #34323d;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.opcao > ul{font-size:13px;color:#c4c1d0;padding-left:18px}
+.aparelho ul{padding:0;margin:0}
+.demo{position:sticky;top:0;z-index:100;background:#1c1b22ee;backdrop-filter:blur(8px);padding:10px 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.demo button{background:#2c2a35;border:1px solid #3d3a48;color:#ececf1;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+.demo label{font-size:13px;color:#a6a3b4;display:flex;gap:8px;align-items:center}
+
+/* aparelho: iPhone 15 Pro Max deitado = 932 x 430 pt */
+.escala{width:100%;position:relative}
+.aparelho{position:absolute;left:12px;top:12px;width:932px;height:430px;background:#000;border-radius:56px;overflow:hidden;box-shadow:0 0 0 10px #2a2830,0 0 0 12px #47444f,0 24px 48px rgba(0,0,0,.45);transform-origin:top left}
+.ilha{position:absolute;left:11px;top:50%;width:37px;height:126px;margin-top:-63px;background:#000;border-radius:20px;z-index:50;box-shadow:0 0 0 1px #111}
+.preview{position:absolute;left:84px;top:0;width:764px;height:430px;background:url(fundo.jpg) center/cover;overflow:hidden;user-select:none}
+.grade i{position:absolute;background:rgba(255,255,255,.35);pointer-events:none}
+.cruz{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none}
+.cruz:before,.cruz:after{content:"";position:absolute;background:rgba(255,255,255,.85)}
+.cruz:before{left:12px;top:0;width:1.5px;height:26px}.cruz:after{top:12px;left:0;height:1.5px;width:26px}
+.nivel{position:absolute;left:50%;top:50%;width:300px;height:2px;margin-left:-150px;pointer-events:none;transition:transform .1s linear}
+.nivel b{position:absolute;top:0;height:2px;width:120px;background:rgba(255,255,255,.9);border-radius:2px}
+.nivel b:first-child{left:0}.nivel b:last-child{right:0}
+.nivel.reto b{background:var(--amarelo)}
+.tally{position:absolute;inset:0;border:5px solid var(--vermelho);pointer-events:none;display:none;z-index:40}
+.selo-ar{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--vermelho);color:#fff;font-weight:800;font-size:13px;letter-spacing:.5px;padding:4px 10px;border-radius:99px;display:none;z-index:41}
+.no-ar .tally{display:block}
+/* NO AR: pílula dentro do topo; o selo solto só no modo limpo (sem topo) */
+.no-ar .preview.limpo .selo-ar{display:block}
+.chip.ar{background:var(--vermelho);color:#fff;font-weight:800;letter-spacing:.4px}
+.no-ar .topo-dir,.no-ar .btn-solo{margin-right:0}
+.toast{position:absolute;top:52px;left:50%;transform:translateX(-50%);background:rgba(18,16,24,.88);border-radius:99px;padding:7px 14px;font-size:12.5px;z-index:30;display:none;white-space:nowrap}
+
+/* módulos (base) */
+.mod{position:absolute;background:var(--mod);backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);border:1px solid var(--mod-borda);border-radius:var(--raio);z-index:20;transition:opacity .2s}
+.limpo .mod{opacity:0;pointer-events:none}
+.chips{display:flex;gap:6px;align-items:center;min-width:0;overflow:hidden}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:99px;background:rgba(255,255,255,.08);font-size:12px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.chip .ponto{width:7px;height:7px;border-radius:50%;background:var(--verde)}
+.chip.nome{font-weight:800;background:transparent;font-size:13px;padding:0 4px}
+.chip.aviso{color:#000;background:var(--amarelo)}.chip.urgente{color:#fff;background:var(--vermelho)}
+.chip.quente{color:var(--amarelo)}
+.chip svg{width:13px;height:13px}
+.btn-icone{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);border:0;color:#fff;cursor:pointer;flex:none}
+.btn-icone svg{width:17px;height:17px}
+.ferr-mod{overflow-y:auto;scrollbar-width:none}
+.ferr-mod::-webkit-scrollbar{display:none}
+.ferr-mod ul{list-style:none;display:flex;flex-direction:column;gap:4px;align-items:center}
+.ferr{width:54px;height:52px;border:0;border-radius:12px;background:transparent;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:700 9.5px/1 -apple-system,system-ui,sans-serif;letter-spacing:.3px;cursor:pointer;transition:transform .15s,background .15s}
+.ferr svg{width:20px;height:20px;flex:none}
+.ferr span{max-width:100%;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.ferr:active{transform:scale(.95)}
+.ferr.ativo{background:var(--amarelo);color:#000}
+.ferr.aberto{background:rgba(255,255,255,.16)}
+.ferr.ativo.aberto{background:var(--amarelo)}
+.divisor{width:28px;height:1px;background:rgba(255,255,255,.12);margin:2px 0}
+.cab{font-size:8.5px;letter-spacing:.8px;color:var(--txt2);font-weight:700;text-align:center;padding:2px 0 4px}
+.lentes{display:flex;flex-direction:column;gap:6px;align-items:center;padding:6px}
+.lente{width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:#fff;font:700 13px/1 -apple-system,system-ui,sans-serif;cursor:pointer;font-variant-numeric:tabular-nums;transition:transform .15s,background .15s}
+.lente:active{transform:scale(.95)}
+.lente.ativo{background:var(--amarelo);color:#000}
+.painel{padding:10px 12px;display:none;gap:12px;align-items:center}
+.painel.visivel{display:flex}
+.seg{display:flex;background:rgba(255,255,255,.08);border-radius:10px;padding:3px;gap:2px;flex:none}
+.seg button{border:0;background:transparent;color:#fff;font:600 12.5px/1 -apple-system,system-ui,sans-serif;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--amarelo);color:#000}
+.regua{flex:1;display:flex;align-items:center;gap:10px;min-width:0;font-size:12px;font-variant-numeric:tabular-nums;color:var(--txt2)}
+.regua input{flex:1;min-width:60px;accent-color:var(--amarelo)}
+.regua b{color:#fff;min-width:54px;text-align:right}
+.sheet{position:absolute;top:8px;right:96px;bottom:8px;width:400px;scrollbar-width:none;background:rgba(28,27,34,.95);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--mod-borda);border-radius:20px;z-index:60;padding:14px 16px;overflow-y:auto;display:none}
+.sheet::-webkit-scrollbar{display:none}
+.sheet.aberto{display:block}
+/* dentro da imagem e sem rolar: informações em duas colunas, linhas baixas */
+.sheet [data-toggles]{display:grid;grid-template-columns:1fr 1fr;column-gap:16px}
+.sheet [data-toggles] .linha{padding:5px 0;font-size:12.5px}
+.sheet [data-toggles] .tog{transform:scale(.85);transform-origin:right center}
+.sheet h4{margin:8px 0 2px}
+.sheet{padding:10px 14px}
+.sheet h3{margin-bottom:4px}
+.sheet .campo{padding:5px 9px}
+.sheet > .linha{padding:5px 0}
+.sheet .assin{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12.5px;padding:4px 0}
+.sheet .assin .nota{font-size:11.5px;text-align:right}
+.sheet h3{font-size:15px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.sheet h4{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--txt2);margin:14px 0 6px}
+.linha{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px;gap:10px}
+.tog{appearance:none;width:42px;height:25px;border-radius:99px;background:#3a3842;position:relative;cursor:pointer;flex:none;transition:background .2s}
+.tog:checked{background:var(--verde)}
+.tog:after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .2s}
+.tog:checked:after{transform:translateX(17px)}
+.campo{width:100%;background:#2a2932;border:1px solid #3a3842;color:#fff;border-radius:8px;padding:7px 9px;font-size:13px}
+.nota{font-size:12px;color:var(--txt2);line-height:1.45}
+
+/* E e F: menu geral + trilho (ideia do dono, base Blackmagic) */
+.v-e .topo-esq,.v-f .topo-esq{left:12px;top:8px;height:36px;display:flex;align-items:center;padding:0 10px}
+.v-e .topo-dir,.v-f .topo-dir{right:12px;top:8px;height:36px;display:flex;align-items:center;gap:6px;padding:0 4px 0 8px}
+.menu{top:56px;bottom:12px;width:72px;padding:8px 6px;overflow-y:auto;scrollbar-width:none}
+.menu::-webkit-scrollbar{display:none}
+.menu ul{list-style:none;display:flex;flex-direction:column;gap:6px;min-height:100%;justify-content:center}
+.menu li{display:block;width:100%}
+.item-menu{width:100%;height:56px;border:0;border-radius:12px;background:transparent;color:rgba(255,255,255,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:600 10px/1 -apple-system,system-ui,sans-serif;cursor:pointer;transition:background .15s,color .15s}
+.item-menu svg{width:21px;height:21px}
+.item-menu.sel{background:rgba(255,255,255,.14);color:#fff}
+.item-menu.sel svg{color:var(--amarelo)}
+.trilho{top:56px;bottom:12px;width:92px;padding:8px 6px;overflow-y:auto;scrollbar-width:none;display:none}
+.trilho::-webkit-scrollbar{display:none}
+.trilho.aberto{display:block}
+.trilho .titulo{font-size:8.5px;letter-spacing:.8px;color:var(--txt2);font-weight:700;text-align:center;padding:0 0 6px}
+.trilho ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+/* cada opção ocupa a largura toda; a setinha de configurar fica dentro dela, no canto */
+.opc{position:relative;display:block;width:100%}
+.opc .ferr{width:100%;height:48px;border-radius:12px;background:rgba(255,255,255,.06);font:600 10px/1 -apple-system,system-ui,sans-serif;letter-spacing:0;gap:5px}
+.opc .ferr svg{width:20px;height:20px}
+.opc .ferr{gap:4px}
+/* Info tem 8 itens: duas colunas para caber sem rolar */
+.trilho.duplo{width:172px}
+.trilho.duplo ul{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.v-e .trilho.duplo.aberto ~ .painel{left:268px}
+.painel .texto{font-size:12.5px;color:#fff;line-height:1.4}
+.painel .texto b{font-variant-numeric:tabular-nums}
+.painel .texto span{color:var(--txt2)}
+.opc .ferr.ativo{background:var(--amarelo)}
+.opc .ajustar{position:absolute;top:0;right:0;width:24px;height:54px;border:0;border-radius:0 12px 12px 0;background:transparent;color:inherit;cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;opacity:.75}
+.opc .ferr.ativo + .ajustar{color:#000}
+.opc .ajustar.on{background:rgba(255,255,255,.18);opacity:1}
+.opc .ferr.aberto{box-shadow:inset 0 0 0 2px #fff}
+.v-e .menu{left:12px}.v-e .trilho{left:90px}
+.v-e .lentes,.v-f .lentes{gap:0;padding:4px;border-radius:26px}
+.v-e .lente,.v-f .lente{background:transparent}
+.v-e .lente.ativo,.v-f .lente.ativo{background:var(--amarelo)}
+.v-e .lentes{right:12px;top:50%;transform:translateY(-50%);margin-top:0}
+.v-e .painel{left:86px;right:76px;bottom:12px}
+.v-e .trilho.aberto ~ .painel{left:188px}
+.v-f .menu{right:12px}.v-f .trilho{right:90px}
+.v-f .lentes{left:12px;top:50%;transform:translateY(-50%);margin-top:0}
+.v-f .painel{left:76px;right:86px;bottom:12px}
+.v-f .trilho.aberto ~ .painel{right:188px}
+
+/* topo em duas partes numa linha: a direita tem prioridade, a esquerda encolhe e nunca sobrepõe */
+.topo-linha{position:absolute;left:12px;right:12px;top:8px;display:flex;justify-content:space-between;gap:8px;z-index:20;pointer-events:none}
+.topo-linha .mod{position:relative;left:auto !important;right:auto !important;top:auto !important;pointer-events:auto}
+.topo-linha .topo-esq{flex:0 1 auto;min-width:0}
+.topo-linha .topo-dir{flex:none}
+.topo-esq .chip.nome{display:block;line-height:24px;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:28px}
+.apertado .chip{padding:0 7px}
+.apertado .chip .rot{display:none}
+.apertado .chip.so-texto svg{display:none}
+.apertado .chips{gap:4px}
+.limpo .topo-linha{pointer-events:none}
+
+/* botão limpar: abaixo das lentes, fica visível no modo limpo para voltar */
+.btn-limpo{position:absolute;bottom:12px;width:56px;height:44px;border-radius:14px;border:1px solid var(--mod-borda);background:var(--mod);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);color:#fff;display:grid;place-items:center;z-index:25;cursor:pointer;transition:opacity .2s}
+.btn-limpo svg{width:20px;height:20px}
+.v-e .btn-limpo{right:12px}.v-f .btn-limpo{left:12px}
+.limpo .btn-limpo{opacity:.45}
+
+/* A: colunas */
+.v-a .topo{left:12px;right:12px;top:8px;height:36px;display:flex;align-items:center;gap:6px;padding:0 4px 0 10px}
+.v-a .topo .chips{flex:1}
+.v-a .ferr-mod{left:12px;top:56px;bottom:12px;width:64px;padding:6px 0}
+.v-a .lentes{right:12px;top:50%;transform:translateY(-50%);margin-top:22px}
+.v-a .painel{left:88px;right:80px;bottom:12px}
+
+/* B: compacto */
+.v-b .topo-esq{left:12px;top:8px;height:36px;display:flex;align-items:center;padding:0 10px}
+.v-b .topo-dir{right:12px;top:8px;height:36px;display:flex;align-items:center;gap:6px;padding:0 4px 0 8px}
+.v-b .ferr-mod{left:12px;top:56px;bottom:12px;width:52px;padding:6px 0}
+.v-b .ferr{width:42px;height:42px;gap:0}
+.v-b .ferr span{display:none}
+.v-b .lentes{right:12px;top:50%;transform:translateY(-50%);margin-top:22px;gap:0;padding:4px;border-radius:26px}
+.v-b .lente{background:transparent}
+.v-b .lente.ativo{background:var(--amarelo)}
+.v-b .painel{left:76px;right:76px;bottom:12px}
+
+/* C: grupos */
+.v-c .topo{left:50%;transform:translateX(-50%);top:8px;height:36px;display:flex;align-items:center;gap:6px;padding:0 4px 0 10px;max-width:740px}
+.v-c .ferr-mod{left:12px;width:64px;padding:4px 0}
+.v-c .ferr-mod.g1{top:56px;bottom:170px}
+.v-c .ferr-mod.g2{bottom:12px;height:150px}
+.v-c .lentes{right:12px;bottom:12px}
+.v-c .painel{left:88px;right:80px;bottom:12px}
+
+/* D: lentes embaixo */
+.v-d .topo{left:12px;top:8px;height:36px;display:flex;align-items:center;gap:6px;padding:0 10px;max-width:640px}
+.v-d .btn-solo{position:absolute;right:12px;top:8px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;z-index:20;color:#fff;cursor:pointer}
+.v-d .ferr-mod{left:12px;top:56px;bottom:12px;width:64px;padding:6px 0}
+.v-d .lentes{left:50%;bottom:12px;transform:translateX(-50%);flex-direction:row;border-radius:30px}
+.v-d .painel{left:88px;right:12px;bottom:76px}
+.v-d .btn-solo svg{width:18px;height:18px}
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Tela do OBS Cam Mobile: opções | droidcam-iphone-fmconecta</h1>
+    <p class="sub">iPhone 15 Pro Max deitado, com um quadro real da sua câmera de fundo. Todas funcionam: clique nos botões, toque duplo na imagem liga e desliga o modo limpo, engrenagem abre os ajustes (com "Informações no topo"). Foco só Auto e Manual em todas.</p>
+  </div>
+  <div class="demo">
+    <button data-demo="ar">Simular NO AR (OBS)</button>
+    <button data-demo="vence">Simular assinatura vencendo</button>
+    <label>Inclinar o iPhone <input type="range" id="demoIncl" min="-15" max="15" step="0.5" value="4"></label>
+  </div>
+  <section class="opcao" data-v="e">
+    <h2><span class="letra">E</span>Menu à esquerda + trilho</h2>
+    <ul><li>Menu geral à esquerda: Câmera, Guias, Info, Ajustes. Toque num item: ele fica marcado e abre o trilho ao lado.</li><li>No trilho, toque liga e desliga. Opção com ajuste (BB, Foco, EV, Nome, Wi-Fi, Validade, Gestos) abre a configuração embaixo.</li><li>Botão de limpar a tela no canto de baixo à direita, abaixo das lentes.</li><li>"Info" liga e desliga cada informação do topo na hora. "Ajustes": nome, Wi-Fi, validade e gestos. Topo sem engrenagem.</li></ul>
+    <div class="escala"></div>
+  </section>
+  <section class="opcao" data-v="f">
+    <h2><span class="letra">F</span>Menu à direita + trilho</h2>
+    <ul><li>Mesma ideia da E, espelhada: menu e trilho à direita (mão direita), lentes à esquerda.</li><li>Do lado esquerdo fica só a pílula das lentes, longe da Dynamic Island.</li></ul>
+    <div class="escala"></div>
+  </section>
+  <details class="opcao"><summary style="cursor:pointer;font-weight:700">Opções anteriores (A, B, C, D)</summary>
+  <section class="opcao" data-v="a">
+    <h2><span class="letra">A</span>Colunas</h2>
+    <ul><li>Topo inteiro numa barra só, com as pílulas e a engrenagem no fim.</li><li>Ferramentas numa coluna com ícone e nome, com rolagem.</li><li>Lentes numa coluna à direita, no meio da altura.</li></ul>
+    <div class="escala"></div>
+  </section>
+  <section class="opcao" data-v="b">
+    <h2><span class="letra">B</span>Compacto</h2>
+    <ul><li>Topo em duas partes: quem é (estado e nome) à esquerda, números à direita.</li><li>Ferramentas só com ícone (mais imagem livre).</li><li>Lentes numa pílula única, sem bolinhas separadas.</li></ul>
+    <div class="escala"></div>
+  </section>
+  <section class="opcao" data-v="c">
+    <h2><span class="letra">C</span>Grupos</h2>
+    <ul><li>Topo centralizado e só do tamanho do que está ligado.</li><li>Ferramentas em dois módulos: Câmera (em cima) e Guias (embaixo).</li><li>Lentes no canto de baixo à direita.</li></ul>
+    <div class="escala"></div>
+  </section>
+  <section class="opcao" data-v="d">
+    <h2><span class="letra">D</span>Lentes embaixo</h2>
+    <ul><li>Lentes deitadas no centro de baixo, como no app Câmera do iPhone.</li><li>Topo à esquerda, engrenagem solta no canto direito.</li><li>Painéis de foco, EV e branco abrem logo acima das lentes.</li></ul>
+    <div class="escala"></div>
+  </section>
+  </details>
+</main>
+
+<script>
+const SVG = {
+  estab:'<path d="M3 12h3M18 12h3M12 3v3M12 18v3"/><circle cx="12" cy="12" r="5"/><path d="M12 9v6M9 12h6"/>',
+  bb:'<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+  trava:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  foco:'<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="2"/>',
+  ev:'<circle cx="12" cy="12" r="9"/><path d="M12 7v4M10 9h4M10 15h4"/>',
+  grade:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>',
+  cruz:'<path d="M12 5v14M5 12h14"/>',
+  nivel:'<rect x="2" y="8" width="20" height="8" rx="4"/><circle cx="12" cy="12" r="2"/>',
+  limpo:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22"/>',
+  bat:'<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/><path d="M11 9l-2 3h3l-2 3"/>',
+  term:'<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+  cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  wifi:'<path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>',
+  camera:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  ponto:'<circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/>',
+  tag:'<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5"/>',
+  filme:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"/>',
+  abert:'<circle cx="12" cy="12" r="9"/><path d="M14.3 3.3 9 12M20.7 9.6 10.4 9.6M17.6 18.4 12.5 9.6M9.7 20.7l5.2-8.8M3.3 14.4h10.3M6.4 5.6l5.1 8.8"/>',
+  mao:'<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+  lado:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'
+};
+const icone = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+SVG[n]+'</svg>';
+const esc = s => s.replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const ler = (k, d) => { try { const v = localStorage.getItem('fmcam-proto-'+k); return v === null ? d : JSON.parse(v) } catch(e) { return d } };
+const gravar = (k, v) => { try { localStorage.setItem('fmcam-proto-'+k, JSON.stringify(v)) } catch(e) {} };
+
+const ITENS_TOPO = [['estado','Estado da conexão'],['nome','Nome da câmera'],['res','Resolução e fps'],['iso','ISO e obturador'],['bat','Bateria'],['temp','Temperatura'],['validade','Validade da assinatura'],['ip','Endereço Wi-Fi']];
+const CAMERA = [
+  {k:'estab', r:'Estab', i:'estab', tipo:'toggle'},
+  {k:'travaAE', r:'Trava AE', i:'trava', tipo:'toggle'},
+  {k:'travaAF', r:'Trava AF', i:'trava', tipo:'toggle'},
+  {k:'bb', r:'BB', i:'bb', tipo:'painel'},
+  {k:'foco', r:'Foco', i:'foco', tipo:'painel'},
+  {k:'ev', r:'EV', i:'ev', tipo:'painel'}
+];
+const GUIAS = [
+  {k:'grade', r:'Grade', i:'grade', tipo:'toggle'},
+  {k:'cruz', r:'Cruz', i:'cruz', tipo:'toggle'},
+  {k:'nivel', r:'Nível', i:'nivel', tipo:'toggle'},
+  {k:'limpo', r:'Limpo', i:'limpo', tipo:'acao'}
+];
+const URLQ = new URLSearchParams(location.search);
+const global = { noar: URLQ.get('ar')==='1', vence:6, incl:4 };
+const telas = [];
+
+function Tela(secao){
+  const v = secao.dataset.v, escala = secao.querySelector('.escala');
+  const est = { estab:false, bbTravado:false, travaAE:false, travaAF:false, foco:'Auto', ev:0, evManual:false, iso:483, obt:'1/60', kelvin:5200,
+    grade:true, cruz:true, nivel:false, limpo:false, painel:(v==='e'||v==='f') ? URLQ.get('painel') : null, lente:'1', nome:'iPhone dev', grupo:(v==='e'||v==='f') ? URLQ.get('grupo') : null,
+    topo: ler('topo-'+v, {estado:true,nome:true,res:true,iso:false,bat:true,temp:true,validade:true,ip:false}) };
+  if (URLQ.get('ip')==='1') est.topo = Object.assign({}, est.topo, {ip:true, iso: URLQ.get('iso')==='1' || est.topo.iso});
+  const ferrMod = (lista, cls, cab) => '<nav class="mod ferr-mod '+cls+'" aria-label="Ferramentas">'+(cab?'<div class="cab">'+cab+'</div>':'')+'<ul data-lista="'+cls+'"></ul></nav>';
+  let topoHtml, ferrHtml;
+  const gearBtn = '<button class="btn-icone" data-acao="ajustes" aria-label="Ajustes">'+icone('gear')+'</button>';
+  if (v==='b' || v==='e' || v==='f') topoHtml = '<div class="topo-linha"><div class="mod topo-esq"><div class="chips" data-chips="esq"></div></div><div class="mod topo-dir"><div class="chips" data-chips="dir"></div>'+(v==='b' ? gearBtn : '')+'</div></div>';
+  else if (v==='d') topoHtml = '<div class="mod topo"><div class="chips" data-chips="todos"></div></div><button class="mod btn-solo" data-acao="ajustes" aria-label="Ajustes">'+icone('gear')+'</button>';
+  else topoHtml = '<div class="mod topo"><div class="chips" data-chips="todos"></div>'+gearBtn+'</div>';
+  ferrHtml = (v==='e' || v==='f') ? '<nav class="mod menu" aria-label="Menu"><ul data-menu></ul></nav><nav class="mod trilho" aria-label="Opções"><div class="titulo" data-titulo></div><ul data-trilho></ul></nav>' : v==='c' ? ferrMod(CAMERA,'g1','CÂMERA') + ferrMod(GUIAS,'g2','GUIAS') : ferrMod(null,'g0');
+  escala.innerHTML = '<div class="aparelho v-'+v+'"><div class="ilha"></div><div class="preview">'+
+    '<div class="grade"><i style="left:33.33%;top:0;width:1px;height:100%"></i><i style="left:66.66%;top:0;width:1px;height:100%"></i><i style="top:33.33%;left:0;height:1px;width:100%"></i><i style="top:66.66%;left:0;height:1px;width:100%"></i></div>'+
+    '<div class="cruz"></div><div class="nivel"><b></b><b></b></div><div class="tally"></div><div class="selo-ar">NO AR</div><div class="toast"></div>'+
+    topoHtml + ferrHtml + '<div class="mod lentes"></div><div class="mod painel"></div>'+((v==='e'||v==='f') ? '<button class="btn-limpo" data-acao="limpo" aria-label="Limpar a tela" title="Limpar a tela">'+icone('limpo')+'</button>' : '')+'</div>'+
+    '<aside class="sheet" aria-label="Ajustes"><h3>Ajustes <button class="btn-icone" data-acao="fechar" aria-label="Fechar">&#10005;</button></h3>'+
+    '<h4>Câmera</h4><div class="linha"><span>Nome desta câmera</span></div><input class="campo" data-campo="nome" value="iPhone dev" maxlength="40">'+
+    '<h4>Informações no topo</h4><div data-toggles></div>'+
+    '<h4>Assinatura do app</h4><div class="assin"><span data-validade>Vence em 25/11 às 10:29</span><span class="nota">Renova pelo SideStore</span></div></aside></div>';
+  const $ = s => escala.querySelector(s), $$ = s => escala.querySelectorAll(s);
+  const ap = $('.aparelho'), prev = $('.preview');
+
+  function chip(k){
+    const t = est.topo;
+    if (!t[k]) return '';
+    switch(k){
+      case 'estado': return '<span class="chip" title="Conectado a OBS Cam Mobile Extension 1.0.0"><span class="ponto"></span><span class="rot">Conectado</span></span>';
+      case 'nome': return '<span class="chip nome">'+esc(est.nome || 'iPhone')+'</span>';
+      case 'res': return '<span class="chip">1080p · 60</span>';
+      case 'iso': return '<span class="chip">ISO '+est.iso+'  '+est.obt+'</span>';
+      case 'bat': return '<span class="chip so-texto">'+icone('bat')+'95%</span>';
+      case 'temp': return '<span class="chip quente so-texto">'+icone('term')+'Quente</span>';
+      case 'validade': { const d = global.vence; return '<span class="chip '+(d<=0?'urgente':d<=2?'aviso':'')+'">'+icone('cal')+(d<=0?'Vencida':d<1?'&lt; 1 dia':d+(d===1?' dia':' dias'))+'</span>' }
+      case 'ip': return '<span class="chip">'+icone('wifi')+'192.168.200.96:4848</span>';
+    }
+  }
+  function desenharTopo(){
+    const todos = ITENS_TOPO.map(x => x[0]);
+    $$('[data-chips]').forEach(el => {
+      const q = el.dataset.chips;
+      const ks = q==='esq' ? ['estado','nome'] : q==='dir' ? todos.filter(k => k!=='estado' && k!=='nome') : todos;
+      el.innerHTML = (global.noar && (q==='esq' || q==='todos') ? '<span class="chip ar">NO AR</span>' : '') + ks.map(chip).join('');
+      el.parentElement.style.display = el.innerHTML || el.parentElement.querySelector('[data-acao]') ? '' : 'none';
+    });
+    const linha = $('.topo-linha');
+    if (linha) {
+      linha.classList.remove('apertado');
+      const precisa = () => $('.topo-esq [data-chips]').scrollWidth + 20 + $('.topo-dir').offsetWidth + 8 > linha.clientWidth;
+      if (precisa()) linha.classList.add('apertado');
+    }
+  }
+  function rotulo(f){
+    if (f.k==='bb') return est.bbTravado ? (est.kelvin/1000).toFixed(1)+'K' : 'BB';
+    if (f.k==='foco') return est.foco==='Manual' ? 'MF' : 'AF';
+    if (f.k==='ev') return est.ev===0 || est.evManual ? (est.evManual?'ISO':'EV') : (est.ev>0?'+':'')+est.ev.toFixed(1);
+    return f.r;
+  }
+  function ativo(f){
+    if (f.tipo==='toggle') return !!est[f.k];
+    if (f.k==='bb') return est.bbTravado;
+    if (f.k==='foco') return est.foco==='Manual';
+    if (f.k==='ev') return est.ev!==0 || est.evManual;
+    return false;
+  }
+  const botao = f => '<li><button class="ferr'+(ativo(f)?' ativo':'')+(est.painel===f.k?' aberto':'')+'" data-k="'+f.k+'" aria-label="'+f.r+'" title="'+f.r+'">'+icone(f.i)+'<span>'+rotulo(f)+'</span></button></li>';
+  function desenharFerramentas(){
+    $$('[data-lista]').forEach(ul => {
+      const c = ul.dataset.lista;
+      ul.innerHTML = c==='g1' ? CAMERA.map(botao).join('') : c==='g2' ? GUIAS.map(botao).join('')
+        : CAMERA.map(botao).join('') + '<li class="divisor" aria-hidden="true"></li>' + GUIAS.map(botao).join('');
+    });
+    $$('.ferr').forEach(b => b.onclick = () => tocar(b.dataset.k));
+  }
+  const MENU = [['camera','Câmera','camera'],['guias','Guias','grade'],['info','Info','info'],['ajustes','Ajustes','gear']];
+  const CONFIGURAVEL = {bb:1, foco:1, ev:1};
+  function desenharMenu(){
+    const m = $('[data-menu]'); if (!m) return;
+    m.innerHTML = MENU.map(([k,r,i]) => '<li><button class="item-menu'+(est.grupo===k?' sel':'')+'" data-g="'+k+'" aria-label="'+r+'" aria-pressed="'+(est.grupo===k)+'">'+icone(i)+r+'</button></li>').join('');
+    m.querySelectorAll('.item-menu').forEach(b => b.onclick = () => {
+      const g = b.dataset.g;
+      est.grupo = est.grupo===g ? null : g; if (!est.grupo) est.painel = null; tudo();
+    });
+    const t = $('.trilho'); t.classList.toggle('aberto', !!est.grupo);
+    const ul = $('[data-trilho]');
+    if (!est.grupo) { ul.innerHTML = ''; return }
+    $('[data-titulo]').textContent = {camera:'CÂMERA', guias:'GUIAS', info:'INFO', ajustes:'AJUSTES'}[est.grupo];
+    if (est.grupo==='ajustes') {
+      const AJ = [['nome','Nome','tag'],['wifi','Wi-Fi','wifi'],['assinatura','Validade','cal'],['gestos','Gestos','mao'],['lado','Menu','lado']];
+      ul.innerHTML = AJ.map(([k,r,i]) => '<li class="opc"><button class="ferr'+(est.painel===k?' aberto':'')+'" data-aj2="'+k+'" aria-label="'+r+'" aria-expanded="'+(est.painel===k)+'">'+icone(i)+'<span>'+r+'</span></button></li>').join('');
+      ul.querySelectorAll('[data-aj2]').forEach(b => b.onclick = () => { est.painel = est.painel===b.dataset.aj2 ? null : b.dataset.aj2; tudo() });
+      return;
+    }
+    if (est.grupo==='info') {
+      const CURTO = {estado:['Status','ponto'], nome:['Nome','tag'], res:['Formato','filme'], iso:['ISO','abert'], bat:['Bateria','bat'], temp:['Temp.','term'], validade:['Validade','cal'], ip:['IP','wifi']};
+      ul.innerHTML = ITENS_TOPO.map(([k,r]) => '<li class="opc"><button class="ferr'+(est.topo[k]?' ativo':'')+'" data-info="'+k+'" aria-label="'+r+'" title="'+r+'">'+icone(CURTO[k][1])+'<span>'+CURTO[k][0]+'</span></button></li>').join('');
+      ul.querySelectorAll('[data-info]').forEach(b => b.onclick = () => { est.topo[b.dataset.info] = !est.topo[b.dataset.info]; gravar('topo-'+v, est.topo); desenharToggles(); tudo() });
+      return;
+    }
+    const lista = est.grupo==='camera' ? CAMERA : GUIAS.filter(f => f.k!=='limpo');
+    ul.innerHTML = lista.map(f => '<li class="opc'+(CONFIGURAVEL[f.k]?' com-ajuste':'')+'">'+
+      '<button class="ferr'+(ativoTrilho(f)?' ativo':'')+(est.painel===f.k?' aberto':'')+'" data-t="'+f.k+'" aria-label="'+f.r+'" aria-expanded="'+(CONFIGURAVEL[f.k]?String(est.painel===f.k):'')+'">'+icone(f.i)+'<span>'+rotulo(f)+'</span></button></li>').join('');
+    // Opção com ajuste abre a configuração direto; opção simples liga e desliga.
+    ul.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+      const k = b.dataset.t;
+      if (CONFIGURAVEL[k]) { est.painel = est.painel===k ? null : k; tudo() } else alternar(k);
+    });
+  }
+  function ativoTrilho(f){ return ativo(f) }
+  // No trilho, toque liga e desliga direto (BB: auto ou travado, Foco: auto ou manual, EV: auto ou manual).
+  function alternar(k){
+    if (k==='bb') est.bbTravado = !est.bbTravado;
+    else if (k==='foco') est.foco = est.foco==='Auto' ? 'Manual' : 'Auto';
+    else if (k==='ev') { est.evManual = !est.evManual; if (!est.evManual) est.ev = 0 }
+    else { tocar(k); return }
+    tudo();
+  }
+  function tocar(k){
+    const f = CAMERA.concat(GUIAS).find(x => x.k===k);
+    if (f.tipo==='toggle'){
+      est[k] = !est[k];
+      if (k==='estab' && est.estab && est.lente==='5') { est.estab = false; aviso('A estabilização não está disponível nesta lente.') }
+      if (k==='travaAE') aviso(est.travaAE ? 'Exposição travada' : 'Exposição automática');
+      if (k==='travaAF') aviso(est.travaAF ? 'Foco travado' : 'Foco automático');
+    } else if (f.tipo==='painel') est.painel = est.painel===k ? null : k;
+    else est.limpo = true;
+    tudo();
+  }
+  function desenharLentes(){
+    $('.lentes').innerHTML = ['0,5','1','2','5'].map(l => '<button class="lente'+(est.lente===l?' ativo':'')+'" data-l="'+l+'" aria-label="Lente '+l+'x">'+(est.lente===l?l+'x':l)+'</button>').join('');
+    $$('.lente').forEach(b => b.onclick = () => { est.lente = b.dataset.l; if (est.lente==='5' && est.estab) { est.estab = false; aviso('A estabilização não está disponível nesta lente.') } tudo() });
+  }
+  const seg = (ops, atual, a) => '<div class="seg">'+ops.map(o => '<button class="'+(o===atual?'on':'')+'" data-v="'+o+'" data-a="'+a+'">'+o+'</button>').join('')+'</div>';
+  const fmtEv = x => (x>0?'+':'')+x.toFixed(1)+' EV';
+  function desenharPainel(){
+    const p = $('.painel');
+    p.classList.toggle('visivel', !!est.painel);
+    if (est.painel==='foco') p.innerHTML = seg(['Auto','Manual'], est.foco, 'foco') +
+      (est.foco==='Manual' ? '<div class="regua">Perto<input type="range" min="0" max="100" value="40">Longe</div>' : '<div class="regua">Foca sozinho e acompanha a cena. Toque na imagem para escolher o ponto.</div>');
+    else if (est.painel==='ev') p.innerHTML = seg(['Auto','Manual'], est.evManual?'Manual':'Auto', 'evmodo') +
+      (est.evManual ? '<div class="regua">ISO<input type="range" min="50" max="3200" value="'+est.iso+'" data-r="iso"><b data-b="iso">'+est.iso+'</b>Obt.<b>'+est.obt+'</b></div>'
+        : '<div class="regua">EV<input type="range" min="-2" max="2" step="0.1" value="'+est.ev+'" data-r="ev"><b data-b="ev">'+fmtEv(est.ev)+'</b></div>');
+    else if (est.painel==='bb') p.innerHTML = seg(['Auto','Travado'], est.bbTravado?'Travado':'Auto', 'bb') +
+      (est.bbTravado ? '<div class="regua">Temperatura<input type="range" min="2500" max="8000" step="100" value="'+est.kelvin+'" data-r="k"><b data-b="k">'+est.kelvin+' K</b></div>' : '<div class="regua">O iPhone ajusta o branco sozinho.</div>');
+    else if (est.painel==='nome') p.innerHTML = '<div class="regua" style="color:#fff">Nome desta câmera (aparece no OBS)<input class="campo" data-campo="nome2" maxlength="40" style="flex:1;accent-color:auto" value="'+esc(est.nome)+'"></div>';
+    else if (est.painel==='wifi') p.innerHTML = '<div class="texto">Endereço <b>192.168.200.96</b>, porta <b>4848</b>.<br><span>No OBS o iPhone aparece sozinho. Se não aparecer, digite esse endereço.</span></div>';
+    else if (est.painel==='lado') p.innerHTML = seg(['Esquerda','Direita'], ap.classList.contains('v-f') ? 'Direita' : 'Esquerda', 'lado') + '<div class="regua">Lado do menu e do trilho. As lentes vão para o outro lado.</div>';
+    else if (est.painel==='gestos') p.innerHTML = '<div class="texto">Toque foca. Toque longo trava foco e exposição.<br>Toque duplo limpa a tela. Pinça muda o zoom.</div>';
+    else if (est.painel==='assinatura') { const d = global.vence; p.innerHTML = '<div class="regua" style="color:#fff">'+(d<=0 ? 'Assinatura vencida em 25/11 às 10:29.' : 'Assinatura vence em 25/11 às 10:29.')+'<span style="color:var(--txt2)">Renova pelo SideStore.</span></div>' }
+    else p.innerHTML = '';
+    const n2 = p.querySelector('[data-campo=nome2]'); if (n2) n2.oninput = () => { est.nome = n2.value; desenharTopo() };
+    p.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+      const val = b.dataset.v, a = b.dataset.a;
+      if (a==='lado') { ap.classList.toggle('v-e', val==='Esquerda'); ap.classList.toggle('v-f', val==='Direita') }
+      if (a==='foco') est.foco = val; if (a==='evmodo') est.evManual = val==='Manual'; if (a==='bb') est.bbTravado = val==='Travado';
+      tudo();
+    });
+    p.querySelectorAll('[data-r]').forEach(r => r.oninput = () => {
+      const t = r.dataset.r;
+      if (t==='ev') { est.ev = +r.value; p.querySelector('[data-b=ev]').textContent = fmtEv(est.ev) }
+      if (t==='k') { est.kelvin = +r.value; p.querySelector('[data-b=k]').textContent = est.kelvin+' K' }
+      if (t==='iso') { est.iso = +r.value; p.querySelector('[data-b=iso]').textContent = est.iso; desenharTopo() }
+      desenharFerramentas();
+    });
+  }
+  function desenharGuias(){
+    $('.grade').style.display = est.grade || est.limpo ? '' : 'none';
+    $('.cruz').style.display = est.cruz || est.limpo ? '' : 'none';
+    const n = $('.nivel'), reto = Math.abs(global.incl) < 1;
+    n.style.display = est.nivel || est.limpo ? '' : 'none';
+    n.style.transform = 'rotate('+(reto?0:-global.incl)+'deg)'; n.classList.toggle('reto', reto);
+  }
+  let tAviso;
+  function aviso(m){ const t = $('.toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(tAviso); tAviso = setTimeout(() => t.style.display = 'none', 3000) }
+  function desenharToggles(){
+    $('[data-toggles]').innerHTML = ITENS_TOPO.map(([k,r]) => '<label class="linha"><span>'+r+'</span><input type="checkbox" class="tog" data-k="'+k+'"'+(est.topo[k]?' checked':'')+'></label>').join('');
+    $$('[data-toggles] .tog').forEach(el => el.onchange = () => { est.topo[el.dataset.k] = el.checked; gravar('topo-'+v, est.topo); desenharTopo() });
+  }
+  function tudo(){
+    prev.classList.toggle('limpo', est.limpo);
+    ap.classList.toggle('no-ar', global.noar);
+    $('[data-validade]').textContent = global.vence<=0 ? 'Vencida em 25/11 às 10:29' : 'Vence em 25/11 às 10:29';
+    desenharTopo(); desenharFerramentas(); desenharMenu(); desenharLentes(); desenharPainel(); desenharGuias();
+  }
+  prev.addEventListener('dblclick', () => { est.limpo = !est.limpo; tudo() });
+  prev.addEventListener('click', e => { if (est.limpo && e.detail === 1) setTimeout(() => { if (est.limpo) { est.limpo = false; tudo() } }, 260) });
+  $$('[data-acao=ajustes]').forEach(b => b.onclick = () => $('.sheet').classList.add('aberto'));
+  const bl = $('[data-acao=limpo]'); if (bl) bl.onclick = e => { e.stopPropagation(); est.limpo = !est.limpo; tudo() };
+  $('[data-acao=fechar]').onclick = () => $('.sheet').classList.remove('aberto');
+  $('[data-campo=nome]').oninput = e => { est.nome = e.target.value; desenharTopo() };
+  function escalar(){ const w = escala.clientWidth - 24, s = Math.min(1, w/932); ap.style.transform = 'scale('+s+')'; escala.style.height = (430*s + 24)+'px' }
+  desenharToggles(); tudo(); escalar();
+  if (URLQ.get('ajustes')==='1' && v===URLQ.get('v')) $('.sheet').classList.add('aberto');
+  return { tudo, escalar };
+}
+
+document.querySelectorAll('.opcao').forEach(s => telas.push(Tela(s)));
+window.addEventListener('resize', () => telas.forEach(t => t.escalar()));
+document.querySelector('[data-demo=ar]').onclick = () => { global.noar = !global.noar; telas.forEach(t => t.tudo()) };
+document.querySelector('[data-demo=vence]').onclick = () => { global.vence = global.vence > 2 ? 2 : global.vence > 0.5 ? 0.5 : global.vence > 0 ? 0 : 6; telas.forEach(t => t.tudo()) };
+document.getElementById('demoIncl').oninput = e => { global.incl = +e.target.value; telas.forEach(t => t.tudo()) };
+</script>
+</body>
+</html>

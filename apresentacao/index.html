@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBS Cam Mobile | droidcam-iphone-fmconecta</title>
+<style>
+:root{--bg:#f7f7fb;--card:#fff;--fg:#17151f;--muted:#5d5a6b;--line:#e4e2ee;--brand:#6D28D9;--ok:#15803d;--warn:#b45309;--err:#b91c1c;--chip:#efeaff}
+@media (prefers-color-scheme:dark){:root{--bg:#121019;--card:#1b1825;--fg:#ece9f5;--muted:#a39fb5;--line:#2c2839;--brand:#a78bfa;--ok:#4ade80;--warn:#fbbf24;--err:#f87171;--chip:#2a2140}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 16px 64px}
+header{display:flex;gap:16px;align-items:center;margin-bottom:24px}
+header img{width:64px;height:64px;border-radius:15px}
+h1{margin:0;font-size:28px}
+h2{font-size:20px;margin:0 0 12px}
+h3{font-size:16px;margin:16px 0 8px}
+.sub{color:var(--muted);margin:2px 0 0}
+section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 24px;margin:0 0 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.num{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.num b{display:block;font-size:24px}
+.num span{color:var(--muted);font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.err{color:var(--err);font-weight:600}
+ol,ul{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+code{background:var(--chip);border-radius:6px;padding:1px 6px;font-size:14px}
+.chip{display:inline-block;background:var(--chip);color:var(--brand);border-radius:99px;padding:2px 10px;font-size:13px;font-weight:600}
+.foto{width:100%;border-radius:10px;border:1px solid var(--line)}
+@media (max-width:600px){section{padding:16px}th:nth-child(3),td:nth-child(3){display:none}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <img src="../marca/icone-pb-128.png" alt="Ícone do OBS Cam Mobile">
+  <div>
+    <h1>OBS Cam Mobile | droidcam-iphone-fmconecta</h1>
+    <p class="sub">App do iPhone + OBS Cam Mobile Extension do OBS. Situação em 18/11/2026, branch <code>feat/m0</code>, nada commitado.</p>
+  </div>
+</header>
+
+<section>
+  <h2>Em uma frase</h2>
+  <p>O iPhone já manda vídeo para o OBS do Mac pelo cabo e pelo Wi-Fi, com cerca de 50 ms de atraso, vários iPhones ao mesmo tempo, reconexão sozinha, e o OBS já entrega isso no FM Conecta pela câmera virtual. Falta compilar a extensão no Windows e provar 2 horas seguidas no ar.</p>
+  <div class="grid">
+    <div class="num"><b>~49 ms</b><span>atraso iPhone até o Mac (p50), mais ~9 ms de decodificação. Meta: até 100 ms</span></div>
+    <div class="num"><b>1080p30</b><span>0 quadro perdido dentro de cada conexão</span></div>
+    <div class="num"><b>10 min</b><span>no seu OBS, 1080p60, 0 queda e 0 quadro descartado (11:50 a 12:00)</span></div>
+    <div class="num"><b>14 + 102</b><span>testes verdes: C++ e extensão (14) e app iOS no simulador (102)</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Como testar agora</h2>
+  <h3>No iPhone</h3>
+  <ol>
+    <li>Abra o <b>OBS Cam Mobile</b> (ícone da lente). Ele já está instalado no iPhone Leo, versão de hoje 11:45. A tela mostra até quando a assinatura vale (hoje: 25/11 10:29).</li>
+    <li>A tela fica em paisagem com o preview da câmera. Toque uma vez para esconder ou mostrar os controles.</li>
+    <li>Teste: lentes (0.5x, 1x, 2x, 5x), toque para focar, toque longo trava foco e exposição, foco manual, ISO e obturador, balanço de branco, linhas-guia.</li>
+    <li><b>Deixe o OBS Cam Mobile na frente e com a tela acesa.</b> O iOS não deixa nenhum app usar a câmera em segundo plano: saiu do app, o OBS segura o último quadro e volta quando você abrir de novo. Teclado, ajustes e Central de Controle não derrubam mais.</li>
+    <li>Troque o <b>Nome desta câmera</b> (ex.: "Palco 1"). Vale na próxima conexão.</li>
+    <li>O IP do Wi-Fi e a porta aparecem na tela (toque copia). Hoje: <code>192.168.200.96:4848</code>.</li>
+  </ol>
+  <h3>No OBS do Mac</h3>
+  <ol>
+    <li><b>Feche e abra o OBS</b> para carregar a extensão mais nova (11:49).</li>
+    <li>Lente nas propriedades: deixe em <b>Manter a do iPhone</b> para trocar a lente pelo próprio iPhone. Se escolher uma lente ali, o OBS manda essa lente a cada conexão.</li>
+    <li>Fontes, <b>+</b>, <b>OBS Cam Mobile Extension</b>, escolha o iPhone, predefinição <b>1080p30</b>, OK.</li>
+    <li>Painel: menu <b>Docks</b>, <b>OBS Cam Mobile</b>. Mostra cada iPhone com fps, bateria, temperatura, lente, ISO, obturador e o botão "Adicionar à cena".</li>
+    <li>Tally: ponha a cena com a fonte no Programa e veja a borda vermelha "NO AR" no iPhone.</li>
+    <li>Tire o cabo e ponha de volta: a fonte segura o último quadro e volta sozinha.</li>
+    <li>Troque 1080p30 por 720p30: a imagem continua em tela cheia. Item antigo que ficou no canto: Cmd+F uma vez.</li>
+    <li>Wi-Fi: com o iPhone fora do cabo e na mesma rede, ele aparece na lista como "(Wi-Fi)". Permita "Rede local" para o OBS quando o macOS pedir.</li>
+  </ol>
+  <h3>No FM Conecta</h3>
+  <ol>
+    <li>OBS, Controles, engrenagem da câmera virtual: <b>Tipo de saída: Programa</b>.</li>
+    <li><b>Iniciar câmera virtual</b> (a extensão de câmera do OBS já está aprovada no macOS).</li>
+    <li>No Conecta, câmera: <b>OBS Virtual Camera</b>. Microfone continua sendo escolhido no Conecta.</li>
+  </ol>
+  <p class="sub">Contas: nenhuma conta de teste é necessária. O app é assinado com o seu Apple ID pessoal (Personal Team) e vale 7 dias.</p>
+</section>
+
+<section>
+  <h2>O que está pronto</h2>
+  <table>
+    <tr><th>Peça</th><th>Estado</th><th>Prova</th></tr>
+    <tr><td>Protocolo OBS Cam Mobile v1 (<code>docs/PROTOCOLO.md</code>)</td><td class="ok">pronto</td><td>mesmos vetores de bytes testados no C++ e no Swift</td></tr>
+    <tr><td>App OBS Cam Mobile: captura, H.264, servidor 4848, status</td><td class="ok">pronto</td><td>rodando no iPhone Leo, 102 testes no simulador</td></tr>
+    <tr><td>App: preview, linhas-guia, lentes, foco, exposição manual, branco, tally, IP e Bonjour</td><td class="warn">pronto, falta você conferir</td><td>testes da lógica no simulador. A câmera real e a tela só você vê</td></tr>
+    <tr><td>App: presets 1080p120 e 2160p30</td><td class="warn">escrito, não medido</td><td>sem medição no aparelho ainda</td></tr>
+    <tr><td>OBS Cam Mobile Extension no OBS do Mac</td><td class="ok">pronto</td><td>conectado no seu OBS desde 11:10, OBS real sem janela nos testes</td></tr>
+    <tr><td>Vários iPhones ao mesmo tempo</td><td class="ok">pronto</td><td>4 iPhones simulados juntos, derrubar um não afeta os outros. Com iPhones reais: falta</td></tr>
+    <tr><td>Reconexão</td><td class="ok">pronto</td><td>no seu OBS: voltou sozinho em 4 s quando o app reiniciou</td></tr>
+    <tr><td>Wi-Fi (Bonjour + IP manual)</td><td class="warn">pronto, falta você conferir</td><td>testado com anúncio local, não com o iPhone no Wi-Fi</td></tr>
+    <tr><td>Ícone</td><td class="ok">pronto</td><td><code>marca/icone-pb-*.png</code>, já no app</td></tr>
+    <tr><td>Extensão no Windows</td><td class="warn">gerada, não testada</td><td><code>dist/OBSCamMobile-Extension-Windows.zip</code>, compilada no Mac para OBS 33.0.1 x64. Falta rodar no PC</td></tr>
+    <tr><td>Instalador .exe, .ipa para SideStore, POP</td><td class="err">não começou</td><td>fase M3</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Problemas achados e corrigidos hoje</h2>
+  <ul>
+    <li><b>Prova de 10 minutos (critério do M0): passou.</b> De 11:50:12 a 12:00:30 no seu OBS, 1080p60: nenhuma queda, 61 amostras do iPhone entre 59 e 60 fps, 0 quadro descartado. Reconexão quando o app reinicia: cerca de 4 s.</li>
+    <li><b>Vídeo travava e o app ficava mudo por até 1 minuto.</b> A câmera era ligada na mesma fila que atende o OBS. Agora tem fila própria, limite de 2,5 s na partida e um vigia que encerra a sessão se o vídeo parar por 1,5 s. Teste novo <code>e2e_trava</code> reproduz o caso. Com a versão antiga, o seu OBS registrou duas quedas (11:14 e 11:31). A versão nova está no ar desde 11:34 e está sendo monitorada.</li>
+    <li><b>Permissão da câmera era pedida só na primeira conexão</b>, sem ninguém para tocar. Agora é pedida ao abrir o app.</li>
+    <li><b>Visor dizia "0 perdidos" com 66 s sem imagem.</b> Agora conta o tempo sem vídeo e falha.</li>
+    <li><b>8 defeitos da verificação adversarial</b> (cerca de 450 mil casos de fuzz, sanitizers): campo novo no handshake quebrava a extensão, fila do iPhone sem teto, parar a conexão travava por até 4,7 s (agora 10 ms), corrida de dados no app, entre outros. Todos com teste que falha antes e passa depois.</li>
+    <li><b>720p ficava no canto da tela</b> do OBS. A fonte agora se reajusta sozinha.</li>
+    <li><b>Quedas a cada 15 a 60 s enquanto você mexia no app.</b> O app desligava a câmera ao ficar "inativo" (teclado, ajustes, Central de Controle). Agora só desliga quando vai para segundo plano. Achado pelo log do iPhone às 11:39.</li>
+    <li><b>Estabilização com atraso enorme e lente voltando para 1x.</b> O modo automático escolhia o cinematográfico. Agora usa o modo de menor atraso e não troca de lente. E a extensão parou de mandar "grande-angular" em toda reconexão, que sobrescrevia a lente escolhida no iPhone.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>O que ainda não está provado</h2>
+  <ul>
+        <li>Estabilização no aparelho: confirmar que o atraso fica aceitável e que a 5x suporta.</li>
+    <li><b>Atraso vidro a vidro</b> (cronômetro na tela filmado pelo iPhone). Os ~50 ms são da captura até a chegada no Mac, sem contar o desenho no OBS.</li>
+    <li>4K e 120 fps no aparelho, 2 horas seguidas no ar (calor), iPhones reais em paralelo, Windows.</li>
+    <li>Ponto a investigar: uma queda rara dentro do FFmpeg só sob o ThreadSanitizer. O ASan ficou limpo.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Depende de você</h2>
+  <ol>
+    <li><b>Onde compilar a versão Windows</b> da extensão (recomendo Visual Studio Build Tools num PC da empresa). Trava o M1 no Windows.</li>
+    <li><b>Qual Apple ID grátis da empresa</b> assina o app nos iPhones da transmissão (hoje está com o seu, só para teste).</li>
+    <li><b>Quais modelos de iPhone</b> vão para a transmissão.</li>
+    <li><b>Commit:</b> nada foi commitado. Quando quiser, digo o que entra e em quantos commits.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Onde está cada coisa</h2>
+  <ul>
+    <li><code>docs/</code>: <code>PROTOCOLO.md</code>, <code>PLANO.md</code>, <code>HANDOFF.md</code>, <code>PROPOSTA.md</code></li>
+    <li><code>ios/</code>: app (<code>LEIA.md</code> explica instalar pelo Xcode)</li>
+    <li><code>core/</code> e <code>tools/</code>: biblioteca C++, iPhone falso, visor, usbmuxd falso</li>
+    <li><code>obs-plugin/</code>: OBS Cam Mobile Extension (<code>LEIA.md</code> com o passo a passo)</li>
+    <li><code>marca/</code>: ícones. <code>tests/adversarial/</code>: provas da verificação</li>
+    <li>Verificação: <code>sh .claude/verificar.sh</code> (rápido) ou <code>COMPLETO=1 sh .claude/verificar.sh</code></li>
+  </ul>
+</section>
+</main>
+</body>
+</html>

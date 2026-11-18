@@ -1,0 +1,4 @@
+Testes adversariais do M0 (nao fazem parte do build). Ver relatorio da sessao de 18/11/2026.
+C++ (sanitizers): c++ -std=c++17 -g -O1 -fsanitize=address,undefined -fsanitize-recover=undefined -Icore tests/adversarial/fuzz_core.cc core/protocolo.cc core/usbmux.cc core/rede.cc -pthread
+Swift (macOS, sem simulador): swiftc ios/FMCam/Protocolo.swift ios/FMCam/Servidor.swift <stub FonteDeVideo copiado do topo de Captura.swift> swift/servidor_probe.swift
+Python: malserver.py (iPhone malicioso contra o visor), malmux.py (usbmuxd malicioso), atk_falso.py (ataques ao iphone-falso).
