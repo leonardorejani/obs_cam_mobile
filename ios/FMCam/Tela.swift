@@ -277,7 +277,7 @@ final class ModeloApp: ObservableObject {
 
     // MARK: ajustes
 
-    func mudar(_ f: AjustesCamera.Mutacao) {
+    func mudar(rampa: Bool = false, _ f: AjustesCamera.Mutacao) {
         var a = ajustes
         f(&a)
         guard a != ajustes else { return }
@@ -285,14 +285,14 @@ final class ModeloApp: ObservableObject {
         let qualidadeMudou = a.preset != ajustes.preset || a.bitrate != ajustes.bitrate
         let lenteMudou = a.lente != ajustes.lente
         ajustes = a
-        captura.definirAjustes(a)
+        captura.definirAjustes(a, rampa: rampa)
         if qualidadeMudou { servidor?.qualidadeMudou() }
         if lenteMudou { atualizarPresetsSuportados() }
         if nivelMudou { atualizarMovimento() }
     }
 
     func selecionar(_ o: OpcaoLente) {
-        mudar { $0.lente = o.lente; $0.zoom = o.zoom }
+        mudar(rampa: true) { $0.lente = o.lente; $0.zoom = o.zoom }
         Haptico.leve()
     }
 

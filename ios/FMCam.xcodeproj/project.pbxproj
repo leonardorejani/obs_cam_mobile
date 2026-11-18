@@ -10,6 +10,8 @@
 		07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBAEB9013862236B5A0833C /* ServidorTests.swift */; };
 		0B66CD9981A2EA2230C9C8DD /* Tela.swift in Sources */ = {isa = PBXBuildFile; fileRef = A284DB0EB7667CCA2B6D5653 /* Tela.swift */; };
 		1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39E7EF3D2A5A1030227D271 /* Rede.swift */; };
+		28F46B0A5F589A782B0D6659 /* ZoomTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA0249DBCDF844A074329C /* ZoomTests.swift */; };
+		2C263E3DA05FD37A32874F9C /* FocoTestsCena.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */; };
 		304E027475678F9DA466CCED /* Codificador.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB92C044A569ACCACF1CAD76 /* Codificador.swift */; };
 		40ADDA3BD5F9D3E9EBAC7E79 /* Nivel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B028AEC3D81C0C9DEE333A07 /* Nivel.swift */; };
 		5BB595A3594D5D91A083E513 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 439593434EDE25BC619EB9AA /* Assets.xcassets */; };
@@ -27,6 +29,7 @@
 		A60ACA811638DC148929CA8B /* Ajustes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 125EED2E54A21FFB865A3DE9 /* Ajustes.swift */; };
 		B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01EEFF212AE9821838E695 /* RobustezTests.swift */; };
 		B4260BC44A6B248A826CA59E /* Protocolo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */; };
+		BB502A7A758A5BFDC6BEFD3A /* Zoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2C71D059D918D64FCB4EAC /* Zoom.swift */; };
 		E7857DED2B04D6F2CF238AB4 /* Servidor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E74AF1371EA7D49A5B73C56 /* Servidor.swift */; };
 		ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */; };
 		F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */; };
@@ -45,6 +48,7 @@
 /* Begin PBXFileReference section */
 		0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocoloTests.swift; sourceTree = "<group>"; };
 		125EED2E54A21FFB865A3DE9 /* Ajustes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ajustes.swift; sourceTree = "<group>"; };
+		18FA0249DBCDF844A074329C /* ZoomTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomTests.swift; sourceTree = "<group>"; };
 		195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiasParaVencer.swift; sourceTree = "<group>"; };
 		255D03ED05585575E716487C /* Ciclo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ciclo.swift; sourceTree = "<group>"; };
 		385659F9A9C1D145E033907F /* QualidadeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualidadeTests.swift; sourceTree = "<group>"; };
@@ -56,6 +60,7 @@
 		827CD114D1FDC00D88C5D9F2 /* FMCamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FMCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8FEB3328B9DA5729D6889ACF /* Preferencias.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferencias.swift; sourceTree = "<group>"; };
 		910BC902D9BF7F5D8299C44D /* FMCam.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FMCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9B2C71D059D918D64FCB4EAC /* Zoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zoom.swift; sourceTree = "<group>"; };
 		A284DB0EB7667CCA2B6D5653 /* Tela.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tela.swift; sourceTree = "<group>"; };
 		AFBAEB9013862236B5A0833C /* ServidorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServidorTests.swift; sourceTree = "<group>"; };
 		B028AEC3D81C0C9DEE333A07 /* Nivel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Nivel.swift; sourceTree = "<group>"; };
@@ -68,6 +73,7 @@
 		E39E7EF3D2A5A1030227D271 /* Rede.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rede.swift; sourceTree = "<group>"; };
 		E7A18269CD5884510D562316 /* CodificadorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodificadorTests.swift; sourceTree = "<group>"; };
 		EC2BD723A01FADB2F7570812 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocoTestsCena.swift; sourceTree = "<group>"; };
 		FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocolo.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -77,6 +83,7 @@
 			children = (
 				B714FB3E2C8F5EDC41982287 /* CicloTests.swift */,
 				E7A18269CD5884510D562316 /* CodificadorTests.swift */,
+				F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */,
 				3E275455C86C09007A24FE7B /* NomeCameraTests.swift */,
 				0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */,
 				385659F9A9C1D145E033907F /* QualidadeTests.swift */,
@@ -84,6 +91,7 @@
 				BF01EEFF212AE9821838E695 /* RobustezTests.swift */,
 				AFBAEB9013862236B5A0833C /* ServidorTests.swift */,
 				CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */,
+				18FA0249DBCDF844A074329C /* ZoomTests.swift */,
 			);
 			path = FMCamTests;
 			sourceTree = "<group>";
@@ -124,6 +132,7 @@
 				E39E7EF3D2A5A1030227D271 /* Rede.swift */,
 				7E74AF1371EA7D49A5B73C56 /* Servidor.swift */,
 				A284DB0EB7667CCA2B6D5653 /* Tela.swift */,
+				9B2C71D059D918D64FCB4EAC /* Zoom.swift */,
 			);
 			path = FMCam;
 			sourceTree = "<group>";
@@ -230,6 +239,7 @@
 				1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */,
 				E7857DED2B04D6F2CF238AB4 /* Servidor.swift in Sources */,
 				0B66CD9981A2EA2230C9C8DD /* Tela.swift in Sources */,
+				BB502A7A758A5BFDC6BEFD3A /* Zoom.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +249,7 @@
 			files = (
 				80EF6722C8EF5FD15A306008 /* CicloTests.swift in Sources */,
 				65A67C9F475CBE7BBE7F93F2 /* CodificadorTests.swift in Sources */,
+				2C263E3DA05FD37A32874F9C /* FocoTestsCena.swift in Sources */,
 				92A45C34754A8A67CD2C5557 /* NomeCameraTests.swift in Sources */,
 				F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */,
 				62220B2BCEF229BF4CEBA0B9 /* QualidadeTests.swift in Sources */,
@@ -246,6 +257,7 @@
 				B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */,
 				07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */,
 				ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */,
+				28F46B0A5F589A782B0D6659 /* ZoomTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,7 +306,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -427,7 +439,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

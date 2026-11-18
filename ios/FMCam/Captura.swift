@@ -111,19 +111,37 @@ enum Captura {
         return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
     }
 
+    /// Dispositivo virtual traseiro: tripla, senão dupla grande-angular. nil se o aparelho não tem (aí vale a câmera física).
+    static func dispositivoVirtual() -> AVCaptureDevice? {
+        for t in [AVCaptureDevice.DeviceType.builtInTripleCamera, .builtInDualWideCamera] {
+            if let d = AVCaptureDevice.default(t, for: .video, position: .back) { return d }
+        }
+        return nil
+    }
+
+    /// Mesmo critério que a sessão usa para escolher o formato (prefere o que não é "binned").
+    static func formato(_ d: AVCaptureDevice, _ p: Preset) -> AVCaptureDevice.Format? {
+        let fs = d.formats.filter { f in
+            let dim = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+            return Int(dim.width) == p.largura && Int(dim.height) == p.altura
+                && f.videoSupportedFrameRateRanges.contains { $0.minFrameRate <= Double(p.fps) && Double(p.fps) <= $0.maxFrameRate }
+        }
+        return fs.first(where: { !$0.isVideoBinned }) ?? fs.first
+    }
+
+    static func mapaZoom(_ d: AVCaptureDevice) -> MapaZoom {
+        MapaZoom(constituintes: d.constituentDevices.compactMap { lente(de: $0) },
+                 trocas: d.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue })
+    }
+
     /// Formatos que a lente atual aceita de verdade (tamanho e fps).
     static func presetsSuportados(lente: Lente) -> Set<Preset> {
         #if targetEnvironment(simulator)
         return [.p720_30, .p720_60, .p1080_30, .p1080_60]
         #else
         guard let d = dispositivo(para: lente) else { return [.p720_30, .p1080_30] }
-        return Set(Preset.allCases.filter { p in
-            d.formats.contains { f in
-                let dim = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
-                return Int(dim.width) == p.largura && Int(dim.height) == p.altura
-                    && f.videoSupportedFrameRateRanges.contains { $0.minFrameRate <= Double(p.fps) && Double(p.fps) <= $0.maxFrameRate }
-            }
-        })
+        let v = dispositivoVirtual()
+        return Set(Preset.allCases.filter { p in formato(d, p) != nil || v.flatMap { formato($0, p) } != nil })
         #endif
     }
 
@@ -207,6 +225,13 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     private var dimAtual: DimensoesVideo?
     private var dispositivoAtual: AVCaptureDevice?
     private var saidaAtual: AVCaptureVideoDataOutput?
+    /// Usando o dispositivo virtual: a lente muda por rampa de zoom, sem reconfigurar a sessão.
+    private var mapaVirtual: MapaZoom?
+    private var obsConstituinte: NSKeyValueObservation?
+    private var dispositivoObservado: AVCaptureDevice?
+    /// Ponto em que o usuário tocou para focar (nil = foco no centro, nada a devolver).
+    private var pontoTocado: CGPoint?
+    private var ultimaDevolucao: Date?
     private var tentouReiniciar = false
     private var emPrimeiroPlano = false
     private var timerLeitura: DispatchSourceTimer?
@@ -306,12 +331,22 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     // MARK: ajustes ao vivo
 
     /// Mudança feita no iPhone. Vale na hora (o último que mudou ganha).
-    func definirAjustes(_ novo: AjustesCamera) {
+    /// `rampa`: veio do botão de lente (no dispositivo virtual vira rampa de zoom em vez de troca de entrada).
+    func definirAjustes(_ novo: AjustesCamera, rampa: Bool = false) {
         filaSessao.async {
             let antigo = self.ajustes
             self.ajustes = novo
             guard self.dimAtual != nil else { return }
-            if novo.lente != antigo.lente {
+            if rampa, self.mapaVirtual != nil, novo.lente != antigo.lente || novo.zoom != antigo.zoom {
+                self.rampar(novo)
+                // o resto dos ajustes vale na hora, sem mexer no zoom (a rampa cuida dele)
+                var ant = antigo
+                ant.lente = novo.lente
+                ant.zoom = novo.zoom
+                self.aplicarAjustes(antes: ant)
+                return
+            }
+            if novo.lente != antigo.lente, self.mapaVirtual == nil {
                 Log.captura.notice("fmcam captura: trocando de lente \(antigo.lente.rawValue, privacy: .public) para \(novo.lente.rawValue, privacy: .public)")
                 self.garantir(preset: self.preset) { r in
                     if case .success(let dim) = r { self.consumidorAtual()?.aoReconfigurar(dim) }
@@ -344,6 +379,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
                 if d.isExposureModeSupported(.continuousAutoExposure) { d.exposureMode = .continuousAutoExposure }
             }
             d.unlockForConfiguration()
+            self.pontoTocado = ponto
             let destravar: AjustesCamera.Mutacao = { $0.focoTravado = false; $0.exposicaoTravada = false }
             destravar(&self.ajustes)
             self.aoMutacao?(destravar)
@@ -367,7 +403,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             completion?(.failure(.camera("Partida cancelada.")))
             return
         }
-        guard let dispositivo = Captura.dispositivo(para: ajustes.lente) else {
+        guard let dispositivo = escolherDispositivo(preset: preset) else {
             aoEstado?(.semCamera)
             completion?(.failure(.camera("Este aparelho não tem câmera traseira.")))
             return
@@ -375,6 +411,25 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         Captura.autorizar { ok in
             self.filaSessao.async { self.continuar(dispositivo, autorizado: ok, preset: preset, cancelada: cancelada, completion: completion) }
         }
+    }
+
+    /// Dispositivo virtual quando ele tem o formato (e a estabilização, se ligada). Senão a câmera física da lente,
+    /// que é o comportamento de antes, e o motivo vai para o log.
+    private func escolherDispositivo(preset: Preset) -> AVCaptureDevice? {
+        let virtual = Captura.dispositivoVirtual()
+        let formato = virtual.flatMap { Captura.formato($0, preset) }
+        var estabiliza = false
+        if let f = formato {
+            estabiliza = f.isVideoStabilizationModeSupported(.standard)
+            if #available(iOS 17.0, *), f.isVideoStabilizationModeSupported(.previewOptimized) { estabiliza = true }
+        }
+        let modo = ModoCamera.escolher(virtualExiste: virtual != nil, virtualTemFormato: formato != nil,
+                                       estabilizar: ajustes.estabilizar, virtualEstabiliza: estabiliza)
+        if case .virtual = modo, let v = virtual { return v }
+        if case .fisica(let motivo) = modo, virtual != nil {
+            Log.captura.notice("fmcam captura: dispositivo virtual não serve para \(preset.rawValue, privacy: .public) (\(motivo, privacy: .public)), usando a câmera física da lente")
+        }
+        return Captura.dispositivo(para: ajustes.lente)
     }
 
     private func continuar(_ dispositivo: AVCaptureDevice, autorizado: Bool, preset: Preset, cancelada: (() -> Bool)?,
@@ -391,7 +446,10 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             return
         }
         do {
-            let lenteReal = Captura.lente(de: dispositivo) ?? .wide
+            let ehVirtual = Captura.lente(de: dispositivo) == nil && dispositivo.constituentDevices.count > 1
+            let mapa = ehVirtual ? Captura.mapaZoom(dispositivo) : nil
+            // No virtual a "lente" é só um ponto de zoom: vale a pedida, se o aparelho a tem.
+            let lenteReal = ehVirtual ? (mapa?.fatorBase(ajustes.lente) != nil ? ajustes.lente : .wide) : (Captura.lente(de: dispositivo) ?? .wide)
             if lenteReal != ajustes.lente {
                 Log.captura.notice("fmcam captura: lente \(self.ajustes.lente.rawValue, privacy: .public) indisponível, usando \(lenteReal.rawValue, privacy: .public)")
                 let queda: AjustesCamera.Mutacao = { $0.lente = lenteReal; $0.zoom = 1 }
@@ -399,12 +457,15 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
                 aoMutacao?(queda)
             }
             let dim: DimensoesVideo
-            if let atual = dimAtual, let c = configurado, c.preset == preset, c.lente == lenteReal, dispositivoAtual === dispositivo {
+            let chaveLente: Lente = ehVirtual ? .wide : lenteReal
+            if let atual = dimAtual, let c = configurado, c.preset == preset, c.lente == chaveLente, dispositivoAtual === dispositivo {
                 dim = atual
             } else {
                 aoEstado?(.ligando)
-                dim = try configurarSessao(preset: preset, dispositivo: dispositivo, lente: lenteReal)
+                dim = try configurarSessao(preset: preset, dispositivo: dispositivo, lente: chaveLente)
             }
+            mapaVirtual = mapa
+            if mapa != nil { prepararTrocaDeCamera(dispositivo) } else { obsConstituinte = nil; dispositivoObservado = nil }
             aplicarAjustes()
             publicarLimites(dispositivo, dim)
             if !sessao.isRunning {
@@ -485,6 +546,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         dispositivoAtual = dispositivo
         configurado = (preset, lente)
         dimAtual = dim
+        pontoTocado = nil
         trava.lock(); logPrimeiroQuadro = true; trava.unlock()
         aplicarEstabilizacao()
         Log.captura.notice("fmcam captura: configurada, lente \(lente.rawValue, privacy: .public), \(dim.largura, privacy: .public)x\(dim.altura, privacy: .public) a \(dim.fps, privacy: .public) fps")
@@ -535,9 +597,15 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             return f(antes) != f(a)
         }
 
-        if mudou({ [$0.zoom] }) {
-            let maxZoom = min(Double(d.activeFormat.videoMaxZoomFactor), AjustesCamera.faixaZoom.upperBound)
-            d.videoZoomFactor = CGFloat(min(max(a.zoom, 1), maxZoom))
+        if mudou({ [$0.zoom, $0.lente] }) {
+            if let alvo = fatorVirtual(a, d) {
+                // Pinça ou partida: vai direto (a rampa é só para o toque nos botões de lente).
+                d.cancelVideoZoomRamp()
+                d.videoZoomFactor = CGFloat(alvo)
+            } else if mapaVirtual == nil {
+                let maxZoom = min(Double(d.activeFormat.videoMaxZoomFactor), AjustesCamera.faixaZoom.upperBound)
+                d.videoZoomFactor = CGFloat(min(max(a.zoom, 1), maxZoom))
+            }
         }
 
         if mudou({ [$0.exposicaoModo, $0.exposicaoTravada, $0.bias, $0.iso, $0.obturador] }) {
@@ -589,18 +657,72 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         }
     }
 
-    /// A cena mudou: o ponto de toque deixa de valer. Volta foco e exposição para o centro, em modo contínuo.
+    /// Troca de câmera física do virtual: comportamento .auto sem condições restritivas e todas as câmeras mais curtas permitidas
+    /// como reserva, para o sistema cair para a lente que foca (distância mínima de foco, pouca luz) como a câmera nativa.
+    /// Nunca força câmera física. Também liga o log de qual câmera está ativa.
+    private func prepararTrocaDeCamera(_ d: AVCaptureDevice) {
+        if d.primaryConstituentDeviceSwitchingBehavior != .unsupported {
+            do {
+                try d.lockForConfiguration()
+                d.setPrimaryConstituentDeviceSwitchingBehavior(.auto, restrictedSwitchingBehaviorConditions: [])
+                d.fallbackPrimaryConstituentDevices = d.supportedFallbackPrimaryConstituentDevices
+                d.unlockForConfiguration()
+            } catch {
+                Log.captura.notice("fmcam captura: não consegui definir o comportamento de troca de câmera")
+            }
+            Log.captura.notice("fmcam captura: troca de câmera automática, reservas \(d.fallbackPrimaryConstituentDevices.count, privacy: .public) de \(d.supportedFallbackPrimaryConstituentDevices.count, privacy: .public), comportamento \(d.primaryConstituentDeviceSwitchingBehavior.rawValue, privacy: .public) (1 auto, 2 restrito, 3 travado)")
+        }
+        guard dispositivoObservado !== d else { return }
+        dispositivoObservado = d
+        obsConstituinte = d.observe(\.activePrimaryConstituent, options: [.initial, .new]) { dev, _ in
+            Log.captura.notice("fmcam captura: câmera física ativa \(Self.nomeDaCamera(dev.activePrimaryConstituent), privacy: .public), zoom \(dev.videoZoomFactor, format: .fixed(precision: 2), privacy: .public), comportamento de troca \(dev.primaryConstituentDeviceSwitchingBehavior.rawValue, privacy: .public), condições \(dev.primaryConstituentDeviceRestrictedSwitchingBehaviorConditions.rawValue, privacy: .public)")
+        }
+    }
+
+    private static func nomeDaCamera(_ d: AVCaptureDevice?) -> String {
+        guard let d else { return "nenhuma" }
+        return Captura.lente(de: d)?.rawValue ?? d.deviceType.rawValue
+    }
+
+    /// Fator de `videoZoomFactor` no dispositivo virtual para a lente e o zoom pedidos (dentro dos limites do formato).
+    private func fatorVirtual(_ a: AjustesCamera, _ d: AVCaptureDevice) -> Double? {
+        guard let mapa = mapaVirtual, let f = mapa.fator(lente: a.lente, zoom: a.zoom) else { return nil }
+        let teto = min(Double(d.maxAvailableVideoZoomFactor), (mapa.fatorBase(a.lente) ?? 1) * AjustesCamera.faixaZoom.upperBound)
+        return min(max(f, Double(d.minAvailableVideoZoomFactor)), teto)
+    }
+
+    /// Botão de lente no dispositivo virtual: rampa curta de zoom. Não reconfigura a sessão, não muda o codificador,
+    /// não força quadro-chave nem câmera física: o sistema escolhe a que foca.
+    private func rampar(_ a: AjustesCamera) {
+        guard let d = dispositivoAtual, let alvo = fatorVirtual(a, d) else { return }
+        do { try d.lockForConfiguration() } catch { return }
+        defer { d.unlockForConfiguration() }
+        guard let taxa = RampaZoom.taxa(de: Double(d.videoZoomFactor), para: alvo) else { d.videoZoomFactor = CGFloat(alvo); return }
+        Log.captura.notice("fmcam captura: rampa de zoom \(d.videoZoomFactor, format: .fixed(precision: 2), privacy: .public) para \(alvo, format: .fixed(precision: 2), privacy: .public) (lente \(a.lente.rawValue, privacy: .public))")
+        d.ramp(toVideoZoomFactor: CGFloat(alvo), withRate: taxa)
+        filaSessao.asyncAfter(deadline: .now() + RampaZoom.duracaoPadrao + 0.2) {
+            guard let d = self.dispositivoAtual else { return }
+            Log.captura.notice("fmcam captura: rampa terminou em \(d.videoZoomFactor, format: .fixed(precision: 2), privacy: .public), câmera física ativa \(Self.nomeDaCamera(d.activePrimaryConstituent), privacy: .public) (lente pedida \(a.lente.rawValue, privacy: .public))")
+        }
+    }
+
+    /// A cena mudou: se o usuário tinha tocado num ponto fora do centro, volta ao centro uma vez. Sem ponto tocado não faz nada
+    /// (não reescreve modo nem ponto, para não reiniciar a busca do foco). Só reescreve o que de fato está diferente.
     private func cenaMudou(_ d: AVCaptureDevice?) {
         guard let atual = dispositivoAtual, d === atual, PlanoDeFoco.devolveAoCentro(ajustes) else { return }
+        let agora = Date()
+        guard CenaMudou.devolver(pontoTocado: pontoTocado, ultimaVez: ultimaDevolucao, agora: agora) else { return }
         do { try atual.lockForConfiguration() } catch { return }
-        let centro = CGPoint(x: 0.5, y: 0.5)
+        let centro = CenaMudou.centro
         if atual.isFocusPointOfInterestSupported { atual.focusPointOfInterest = centro }
-        if atual.isFocusModeSupported(.continuousAutoFocus) { atual.focusMode = .continuousAutoFocus }
+        if atual.isFocusModeSupported(.continuousAutoFocus), atual.focusMode != .continuousAutoFocus { atual.focusMode = .continuousAutoFocus }
         if ajustes.exposicaoModo == .auto, !ajustes.exposicaoTravada {
             if atual.isExposurePointOfInterestSupported { atual.exposurePointOfInterest = centro }
-            if atual.isExposureModeSupported(.continuousAutoExposure) { atual.exposureMode = .continuousAutoExposure }
+            if atual.isExposureModeSupported(.continuousAutoExposure), atual.exposureMode != .continuousAutoExposure { atual.exposureMode = .continuousAutoExposure }
         }
         atual.unlockForConfiguration()
+        pontoTocado = nil
+        ultimaDevolucao = agora
         Log.captura.notice("fmcam captura: cena mudou, foco e exposição de volta ao centro (foco efetivo=\(atual.focusMode.rawValue, privacy: .public))")
     }
 

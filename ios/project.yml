@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "4"
 targets:
   FMCam:
     type: application
@@ -20,7 +20,7 @@ targets:
       properties:
         CFBundleDisplayName: OBS Cam Mobile
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "2"
+        CFBundleVersion: "4"
         UILaunchScreen: {}
         NSCameraUsageDescription: "O OBS Cam Mobile usa a câmera do iPhone para enviar o vídeo ao OBS pelo cabo."
         NSBonjourServices:

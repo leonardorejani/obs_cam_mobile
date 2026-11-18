@@ -34,6 +34,23 @@ struct PlanoDeFoco: Equatable {
     static func devolveAoCentro(_ a: AjustesCamera) -> Bool { de(a).modo == .continuo }
 }
 
+/// Evento de cena mudou (AVCaptureDeviceSubjectAreaDidChange): só mexe na câmera quando existe um ponto tocado fora do centro.
+/// Sem ponto tocado o foco contínuo já está no centro e reescrever modo ou ponto reinicia a busca do AF (na tele, que tem
+/// pouca profundidade de campo, qualquer movimento dispara o evento e o foco ficava caçando).
+enum CenaMudou {
+    static let intervaloMinimo: TimeInterval = 2
+    static let centro = CGPoint(x: 0.5, y: 0.5)
+
+    static func foraDoCentro(_ p: CGPoint) -> Bool { abs(p.x - 0.5) > 0.02 || abs(p.y - 0.5) > 0.02 }
+
+    /// Volta ao centro uma única vez (quem chama limpa o ponto tocado) e no máximo a cada 2 s.
+    static func devolver(pontoTocado: CGPoint?, ultimaVez: Date?, agora: Date) -> Bool {
+        guard let p = pontoTocado, foraDoCentro(p) else { return false }
+        if let u = ultimaVez, agora.timeIntervalSince(u) < intervaloMinimo { return false }
+        return true
+    }
+}
+
 enum ModoExposicao: String, Codable, CaseIterable {
     case auto, manual
     var rotulo: String { self == .auto ? "Auto" : "Manual" }
