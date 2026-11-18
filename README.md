@@ -12,7 +12,7 @@
   <p><strong>Liga o iPhone no cabo, abre o app e a imagem já está no OBS.</strong></p>
 
   <p>
-    <img src="https://img.shields.io/badge/vers%C3%A3o-1.0.0-4A4A4A?style=for-the-badge&labelColor=0E0E0E" alt="versão 1.0.0" />
+    <img src="https://img.shields.io/badge/vers%C3%A3o-1.0.1-4A4A4A?style=for-the-badge&labelColor=0E0E0E" alt="versão 1.0.1" />
     <img src="https://img.shields.io/badge/iOS-16%2B-0E0E0E?style=for-the-badge&logo=apple&logoColor=white" alt="iOS 16+" />
     <img src="https://img.shields.io/badge/OBS-33.0.1-0E0E0E?style=for-the-badge&logo=obsstudio&logoColor=white" alt="OBS 33.0.1" />
     <img src="https://img.shields.io/badge/Swift-SwiftUI-0E0E0E?style=for-the-badge&logo=swift&logoColor=white" alt="Swift" />
@@ -44,7 +44,7 @@
 ```yaml
 produto:   app de câmera para iPhone + extensão do OBS que recebe o vídeo pelo cabo ou Wi-Fi
 quem_usa:  quem opera transmissões ao vivo com OBS no Windows ou no Mac
-estado:    1.0.0, em uso interno
+estado:    1.0.1, em uso interno
 ```
 
 <!-- /readme-padrao:header -->
