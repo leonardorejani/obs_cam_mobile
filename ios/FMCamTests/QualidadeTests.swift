@@ -297,6 +297,40 @@ final class QualidadeServidorTests: XCTestCase {
         XCTAssertFalse(c.estaFechado)
     }
 
+    /// Varredura 2: sem OBS conectado, mudar a qualidade no iPhone não chegava à câmera (o preview seguia no formato velho e o
+    /// "Formato" do topo dizia outro valor que o painel). Agora o servidor entrega o formato salvo para o preview.
+    func testQualidadeSemConexaoVaiParaACamera() throws {
+        let caixa = CaixaAjustes(AjustesCamera())
+        let fonte = FonteReconfiguravel()
+        _ = try subir(fonte, caixa)
+        let recebidos = CaixaPresets()
+        servidor?.aoQualidadeSemConexao = { recebidos.add($0) }
+        var nova = caixa.valor
+        nova.preset = .p2160_30
+        caixa.valor = nova
+        servidor?.qualidadeMudou()
+        let fim = Date().addingTimeInterval(2)
+        while recebidos.lista.isEmpty && Date() < fim { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
+        XCTAssertEqual(recebidos.lista, [.p2160_30])
+    }
+
+    func testQualidadeComConexaoNaoMexeNoPreview() throws {
+        let caixa = CaixaAjustes(AjustesCamera())
+        let fonte = FonteReconfiguravel()
+        let porta = try subir(fonte, caixa)
+        let recebidos = CaixaPresets()
+        servidor?.aoQualidadeSemConexao = { recebidos.add($0) }
+        let c = ClienteTeste(porta: porta)
+        c.enviar(#"{"v":1}"# + "\n")
+        XCTAssertNotNil(c.lerLinha())
+        var nova = caixa.valor
+        nova.preset = .p720_30
+        caixa.valor = nova
+        servidor?.qualidadeMudou()
+        XCTAssertTrue(c.esperar { fonte.trocas.count == 1 }, "com conexão a sessão troca")
+        XCTAssertTrue(recebidos.lista.isEmpty, "o preview não é mexido por fora da sessão")
+    }
+
     func testPresetEBitrateDoOBSNaoMudamPeloIPhone() throws {
         let caixa = CaixaAjustes(AjustesCamera())
         let fonte = FonteReconfiguravel()
@@ -316,4 +350,11 @@ final class QualidadeServidorTests: XCTestCase {
         XCTAssertTrue(fonte.trocas.isEmpty, "o OBS fixou os dois, o iPhone não troca")
         XCTAssertFalse(c.estaFechado)
     }
+}
+
+private final class CaixaPresets {
+    private let trava = NSLock()
+    private var _lista: [Preset] = []
+    func add(_ p: Preset) { trava.lock(); _lista.append(p); trava.unlock() }
+    var lista: [Preset] { trava.lock(); defer { trava.unlock() }; return _lista }
 }

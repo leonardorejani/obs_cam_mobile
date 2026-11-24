@@ -18,6 +18,8 @@ struct EstadoSessao {
   std::string nome, modelo;
   uint64_t quadros = 0;       // entregues
   uint64_t errosDecodificacao = 0;
+  uint64_t quadrosDescartados = 0;  // pulados porque o decodificador nao dava conta (o atraso passou do limite)
+  bool hardware = false;            // decodificando por hardware (VideoToolbox, D3D11VA, DXVA2)
   double fps = 0;
   int largura = 0, altura = 0;
   int reconexoes = 0;
@@ -27,6 +29,9 @@ struct EstadoSessao {
   bool noAr = false;
   bool pelaRede = false;  // conectado pela entrada de rede do usbmuxd (cabo ligado, mas o macOS apagou a entrada USB)
   bool jaTeveQuadro = false;  // a fonte esta segurando o ultimo quadro quando nao esta Conectado
+  // Ultimo status do iPhone (bateria, temperatura, kbps, ...) e as medidas da extensao (atraso ate o OBS, ida e volta),
+  // atualizado a cada segundo com video. Base do status ao vivo nas propriedades e do botao Testar.
+  StatusIphone status;
 };
 
 class SessaoFonte {
@@ -44,6 +49,9 @@ class SessaoFonte {
   // Desliga os callbacks na hora e fecha tudo. Se a thread da conexao nao sair em `timeoutMs`, ela termina
   // sozinha em segundo plano (dona do proprio estado) e a funcao devolve false: o chamador nunca fica preso.
   bool parar(int timeoutMs);
+  // So teste: segura cada conexao recem aceita por `ms` antes de reservar o iPhone, e conta quantas entraram nessa espera.
+  static void definirAtrasoDeTesteConectadoMs(int ms);
+  static int entradasNoAtrasoDeTeste();
   // Tally: a cena com esta fonte esta no Programa. Manda {"cmd":"noar","valor":...} e repete ao reconectar.
   void definirNoAr(bool noAr);
   EstadoSessao estado() const;

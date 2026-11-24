@@ -11,7 +11,7 @@ INST="$RAIZ/obs-plugin/windows/instalador"
 EXT="$RAIZ/dist/windows/fmcam-extension"
 MSI="$INST/vendor/AppleMobileDeviceSupport64.msi"
 SAIDA="$RAIZ/dist/OBSCamMobile-Extension-Setup.exe"
-VERSAO="${VERSAO:-1.0.0}"
+VERSAO="${VERSAO:-1.0.4}"
 ICO="$INST/fmcam.ico"
 
 command -v makensis >/dev/null || { echo "falta makensis: brew install makensis"; exit 1; }

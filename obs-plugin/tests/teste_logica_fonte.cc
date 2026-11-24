@@ -4,6 +4,7 @@
 // Variaveis de ambiente: FMCAM_IPHONE_FALSO, FMCAM_AMOSTRA.
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <vector>
 #include <chrono>
@@ -13,6 +14,7 @@
 #include <thread>
 
 #include "aparelhos.h"
+#include "decodificador.h"
 #include "ajuste_itens.h"
 #include "config_fonte.h"
 #include "modelo_iphone.h"
@@ -82,10 +84,10 @@ struct Cenario {
     for (auto& p : iphones) p.matar();
     fake.parar();
   }
-  void ligar(int i, int idDev) {  // iPhone i (1..), DeviceID idDev
+  void ligar(int i, int idDev, const std::vector<std::string>& extras = {}) {  // iPhone i (1..), DeviceID idDev
     uint16_t porta;
     auto p = fmtest::iphoneFalso(env("FMCAM_IPHONE_FALSO"), env("FMCAM_AMOSTRA"), "Camera " + std::to_string(i),
-                                 "iPhone " + std::to_string(10 + i), "uuid-" + std::to_string(i), porta);
+                                 "iPhone " + std::to_string(10 + i), "uuid-" + std::to_string(i), porta, extras);
     if (iphones.size() < static_cast<size_t>(i)) {
       iphones.resize(i);
       portas.resize(i);
@@ -435,6 +437,106 @@ TESTE(wifi_bonjour_lista_depois_do_cabo_sem_duplicar_e_conecta) {
   ipW.matar();
   reg.parar();
 }
+TESTE(wifi_por_id_e_cabo_do_mesmo_iphone_a_do_wifi_espera_a_do_cabo_soltar) {
+  Cenario c;
+  c.ligar(1, 1);  // UDID-1, id uuid-1
+  DNSServiceRef an = anunciar("Camera 1", "uuid-1", c.portas[0]);
+  CHECAR(an);
+  RegistroAparelhos reg(c.sock, criarDescobertaWifi(0xFFFFFFFFu));
+  reg.iniciar();
+  Contador a, b;
+  SessaoFonte cabo(cfgPara("UDID-1"), c.sock, &reg);
+  cabo.definirCallbacks(a.cb(), nullptr);
+  cabo.iniciar();
+  CHECAR(esperar([&] { return a.quadros > 10; }));
+  SessaoFonte wifi(normalizar(cfgPara("wifi:uuid-1")), c.sock, &reg);
+  wifi.definirCallbacks(b.cb(), nullptr);
+  wifi.iniciar();
+  CHECAR(esperar([&] { return wifi.estado().estado == EstadoAparelho::Ocupado; }, 6000));
+  CHECAR(wifi.estado().mensagem.find("outra fonte") != std::string::npos);
+  std::this_thread::sleep_for(3s);
+  std::fprintf(stderr, "[medicao] wifi por id com o cabo conectado: quadros=%d reconexoes=%d\n", b.quadros.load(),
+               wifi.estado().reconexoes);
+  CHECAR_IGUAIS(b.quadros.load(), 0);
+  CHECAR_IGUAIS(wifi.estado().reconexoes, 0);
+  CHECAR(cabo.estado().estado == EstadoAparelho::Conectado);
+  // o registro mostra o iPhone conectado (a fonte que espera nao pode sobrescrever o estado da dona)
+  InfoAparelho info;
+  CHECAR(reg.buscar("UDID-1", info));
+  CHECAR(info.estado == EstadoAparelho::Conectado);
+  cabo.parar(3000);
+  CHECAR(esperar([&] { return b.quadros > 10; }, 12000));  // o cabo soltou: o Wi-Fi assume sozinho
+  wifi.parar(3000);
+  DNSServiceRefDeallocate(an);
+  reg.parar();
+}
+// Defeito de 23/11/2026: alternar cabo e Wi-Fi fazia a lista da fonte ganhar "iPhone ... (2)", "(3)". Cada iPhone fisico
+// tem exatamente duas opcoes (Cabo e Wi-Fi), identificadas pelo UDID, qualquer que seja o DeviceID do usbmuxd, o id do
+// Bonjour ou o IP do Wi-Fi manual.
+TESTE(lista_de_aparelhos_nao_cria_entradas_ao_alternar_cabo_wifi_reanunciar_e_trocar_deviceid) {
+  Cenario c;
+  c.ligar(1, 1);  // UDID-1, id uuid-1, modelo "iPhone 11"
+  DNSServiceRef an = anunciar("Camera 1", "uuid-1", c.portas[0]);
+  CHECAR(an);
+  RegistroAparelhos reg(c.sock, criarDescobertaWifi(0xFFFFFFFFu));
+  reg.iniciar();
+  auto doIphone = [&] {  // so o que e deste iPhone (um iPhone de verdade na rede tambem aparece no Bonjour)
+    std::vector<InfoAparelho> r;
+    for (auto& i : reg.listar())
+      if (i.udid == "UDID-1" || i.udid == "wifi:uuid-1" || i.udid == "wifi:127.0.0.1" || i.idApp == "uuid-1") r.push_back(i);
+    return r;
+  };
+  auto confere = [&](const char* quando) {
+    auto l = doIphone();
+    std::string rot = reg.rotulo("UDID-1");
+    std::fprintf(stderr, "[medicao] %s: %zu entrada(s), rotulo '%s', rotulo wifi '%s'\n", quando, l.size(), rot.c_str(),
+                 reg.rotulo("wifi:uuid-1").c_str());
+    CHECAR_IGUAIS(l.size(), size_t(1));
+    CHECAR(rot.find("(2)") == std::string::npos && rot.find("(3)") == std::string::npos);
+    CHECAR_IGUAIS(reg.rotulo("wifi:uuid-1"), rot);  // Wi-Fi do mesmo iPhone tem o mesmo rotulo
+  };
+  for (int ciclo = 0; ciclo < 3; ++ciclo) {
+    // cabo
+    {
+      Contador a1;
+      SessaoFonte s(cfgPara("UDID-1"), c.sock, &reg);
+      s.definirCallbacks(a1.cb(), nullptr);
+      s.iniciar();
+      CHECAR(esperar([&] { return a1.quadros > 5; }, 12000));
+      confere("cabo");
+      s.parar(3000);
+    }
+    // Wi-Fi por IP digitado, e depois por id do Bonjour
+    for (int modo = 0; modo < 2; ++modo) {
+      Contador w;
+      ConfigFonte cw;
+      if (modo == 0) {
+        cw.wifi = true;
+        cw.wifiIp = "127.0.0.1";
+        cw.wifiPorta = c.portas[0];
+      } else {
+        cw = normalizar(cfgPara("wifi:uuid-1"));
+      }
+      SessaoFonte s(cw, c.sock, &reg);
+      s.definirCallbacks(w.cb(), nullptr);
+      s.iniciar();
+      CHECAR(esperar([&] { return w.quadros > 5; }, 12000));
+      confere(modo == 0 ? "wifi por ip" : "wifi por id");
+      s.parar(3000);
+      std::this_thread::sleep_for(300ms);
+      confere("depois de soltar");
+    }
+    // o Bonjour reanuncia e o usbmuxd troca o DeviceID do mesmo UDID
+    DNSServiceRefDeallocate(an);
+    an = anunciar(ciclo % 2 ? "Camera 1" : "Camera 1 (2)", "uuid-1", c.portas[0]);
+    c.fake.desanexar(1);
+    c.fake.anexar({10 + ciclo, "UDID-1", "USB"}, "127.0.0.1", c.portas[0]);
+    std::this_thread::sleep_for(700ms);
+    confere("reanuncio e novo DeviceID");
+  }
+  DNSServiceRefDeallocate(an);
+  reg.parar();
+}
 #endif
 
 namespace {
@@ -446,6 +548,7 @@ struct FalsoComandos {
   std::atomic<int> conexoes{0};
   std::atomic<bool> fecharAgora{false};
   std::atomic<bool> noArRecebido{false};  // espelha o tally recebido, como o app faz no status
+  std::string camposExtras;  // acrescentados ao status (definir antes de conectar), ex.: campos do app 1.0.3
   std::mutex m;
   std::vector<std::string> cmds;
   std::vector<std::string> handshakes;  // linhas recebidas, uma por conexao
@@ -502,7 +605,8 @@ struct FalsoComandos {
           std::string js = "{\"bateria\":0.8,\"carregando\":true,\"temp\":\"nominal\",\"fps\":29.9,\"kbps\":9000,"
                            "\"lente\":\"tele\",\"zoom\":5,\"foco\":\"travado\",\"exposicao\":\"manual\",\"branco\":\"travado\","
                            "\"bias\":-0.7,\"iso\":125,\"obturador\":\"1/60\",\"noar\":" +
-                           std::string(noArRecebido ? "true" : "false") + ",\"w\":1920,\"h\":1080,\"fps_alvo\":30}";
+                           std::string(noArRecebido ? "true" : "false") + ",\"w\":1920,\"h\":1080,\"fps_alvo\":30" +
+                           camposExtras + "}";
           Pacote st;
           st.tipo = kTipoStatus;
           st.tempo = agora;
@@ -964,4 +1068,414 @@ TESTE(sem_nenhuma_entrada_do_udid_continua_fora_do_cabo) {
   CHECAR(!s.estado().pelaRede);
   s.parar(3000);
   reg.parar();
+}
+
+// ---- duas fontes no mesmo iPhone por caminhos diferentes (cabo + Wi-Fi) ----
+// Defeito de 23/11/2026: a reserva era por chave do caminho ("UDID" no cabo, "wifi:<ip>" ou "wifi:<id>" no Wi-Fi), entao
+// uma fonte no cabo e outra no Wi-Fi do MESMO iPhone nao se enxergavam. As duas iam ao iPhone (que atende um cliente
+// so), a perdedora levava "ocupado" e voltava a cada 1 s para sempre, e quando a dona piscava (3 s sem dados) a
+// perdedora pegava o aparelho: a imagem da fonte que o operador via congelava.
+
+TESTE(registro_reserva_e_do_iphone_nao_do_caminho) {
+  RegistroAparelhos reg("/tmp/fmcam_sem_usbmuxd.sock");
+  int a, b;
+  CHECAR(reg.reservar("UDID-1", &a));
+  reg.definirIdentidade("UDID-1", "Camera 1", "iPhone 15", "uuid-1", 1920, 1080);
+  CHECAR(!reg.reservar("wifi:uuid-1", &b));               // Wi-Fi por id do mesmo iPhone
+  CHECAR(!reg.reservar("wifi:10.0.0.5", &b, "uuid-1"));   // Wi-Fi manual, id vindo da recusa "ocupado"
+  CHECAR(reg.reservar("wifi:10.0.0.5", &b, "uuid-9"));    // outro iPhone nao tem nada a ver
+  CHECAR(reg.reservar("UDID-1", &a));                     // a dona pode pedir de novo
+  CHECAR(!reg.ehDona("UDID-1", &b));
+  reg.liberar("UDID-1", &a);
+  CHECAR(reg.reservar("wifi:uuid-1", &b));                // soltou: a outra assume
+  CHECAR(!reg.reservar("UDID-1", &a));                    // e agora o cabo e quem espera
+}
+
+TESTE(duas_fontes_no_mesmo_iphone_cabo_e_wifi_a_segunda_fica_quieta_e_nao_derruba_a_primeira) {
+  Cenario c;
+  // O iPhone trava 5 s depois de 3 s de conexao (so uma vez): a fonte do cabo cai por "3 s sem dados" e reconecta.
+  c.ligar(1, 1, {"--travar-apos-s", "3", "--travar-por-s", "5"});
+  RegistroAparelhos reg(c.sock);
+  reg.iniciar();
+  CHECAR(esperar([&] { return reg.listar().size() == 1; }));
+  Contador a, b;
+  SessaoFonte cabo(cfgPara("UDID-1"), c.sock, &reg);
+  ConfigFonte cw;
+  cw.wifi = true;
+  cw.wifiIp = "127.0.0.1";
+  cw.wifiPorta = c.portas[0];
+  SessaoFonte wifi(cw, c.sock, &reg);  // o mesmo iPhone, so que pela rede (IP digitado)
+  cabo.definirCallbacks(a.cb(), nullptr);
+  wifi.definirCallbacks(b.cb(), nullptr);
+  cabo.iniciar();
+  CHECAR(esperar([&] { return a.quadros > 10; }));
+  wifi.iniciar();
+  const auto t0 = std::chrono::steady_clock::now();
+  const int a0 = a.quadros;
+  int aNoTravamento = 0;
+  bool caiu = false;
+  while (std::chrono::steady_clock::now() - t0 < 14s) {
+    std::this_thread::sleep_for(100ms);
+    if (!caiu && cabo.estado().estado != EstadoAparelho::Conectado) {
+      caiu = true;
+      aNoTravamento = a.quadros;
+    }
+  }
+  const double seg = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  std::fprintf(stderr,
+               "[medicao] cabo: %d quadros em %.1f s, reconexoes=%d, caiu=%d | wifi: quadros=%d, reconexoes=%d, estado=%s\n",
+               a.quadros.load() - a0, seg, cabo.estado().reconexoes, caiu, b.quadros.load(), wifi.estado().reconexoes,
+               chaveEstado(wifi.estado().estado));
+  CHECAR(caiu);                                  // o travamento do iPhone aconteceu de verdade
+  CHECAR_IGUAIS(b.quadros.load(), 0);            // a segunda nunca pegou o iPhone, nem quando a primeira piscou
+  CHECAR(wifi.estado().estado == EstadoAparelho::Ocupado);
+  CHECAR(wifi.estado().mensagem.find("outra fonte") != std::string::npos);
+  CHECAR(wifi.estado().reconexoes <= 1);         // no maximo 1 toque no iPhone (a descoberta do id), sem martelar
+  CHECAR(cabo.estado().estado == EstadoAparelho::Conectado);
+  CHECAR(a.quadros > aNoTravamento + 60);        // a primeira voltou a entregar video depois do travamento
+  cabo.parar(3000);
+  wifi.parar(3000);
+  reg.parar();
+}
+
+TESTE(iphone_em_uso_por_outro_computador_recua_em_vez_de_bater_na_porta_a_cada_segundo) {
+  Cenario c;
+  c.ligar(1, 1);
+  RegistroAparelhos reg(c.sock);
+  reg.iniciar();
+  Conexao intruso([&] {
+    OpcoesConexao o;
+    o.usb = true;
+    o.usbmuxCaminho = c.sock;
+    o.udid = "UDID-1";
+    return o;
+  }());
+  intruso.iniciar();
+  CHECAR(esperar([&] { return intruso.conectada(); }));
+  SessaoFonte s(cfgPara("UDID-1"), c.sock, &reg);
+  s.iniciar();
+  CHECAR(esperar([&] { return s.estado().estado == EstadoAparelho::Ocupado; }));
+  std::this_thread::sleep_for(9s);
+  std::fprintf(stderr, "[medicao] ocupado por outro computador: %d tentativas em ~9 s\n", s.estado().reconexoes);
+  CHECAR(s.estado().reconexoes <= 5);  // 1 s fixo davam 6 ou mais; com recuo (1, 2, 4 s) sao 3 ou 4
+  intruso.parar();
+  CHECAR(esperar([&] { return s.estado().estado == EstadoAparelho::Conectado; }, 12000));  // e ainda assume ao soltar
+  s.parar(3000);
+  reg.parar();
+}
+
+// Defeito de 24/11/2026 (4K30 com muito atraso mesmo no cabo): se o decodificador do PC leva mais que 33 ms por quadro, a
+// thread da conexao le mais devagar que o iPhone manda e o atraso cresce ate o limite da fila do iPhone (1 s de video).
+// Aqui o decodificador e deixado 50 ms por quadro (30 quadros por segundo pedem 33).
+TESTE(decodificador_lento_nao_deixa_o_atraso_crescer_ate_o_limite_da_fila_do_iphone) {
+  Decodificador::definirAtrasoDeTesteUs(50000);
+  double maximo = 0;
+  uint64_t descartados = 0;
+  uint64_t erros = 0;
+  {
+    SessaoFalso f({}, ConfigFonte{});
+    CHECAR(esperar([&] { return f.cont.quadros > 10; }, 10000));
+    for (int i = 0; i < 160; ++i) {  // 16 s
+      std::this_thread::sleep_for(100ms);
+      auto e = f.s->estado();
+      if (e.atrasoCanoMs > maximo) maximo = e.atrasoCanoMs;
+      descartados = e.quadrosDescartados;
+      erros = e.errosDecodificacao;
+    }
+    CHECAR(f.s->estado().estado == EstadoAparelho::Conectado);
+  }
+  Decodificador::definirAtrasoDeTesteUs(0);
+  std::fprintf(stderr, "[medicao] decodificador de 50 ms por quadro: atraso maximo %.0f ms, %llu quadros pulados, %llu erros\n", maximo,
+               (unsigned long long)descartados, (unsigned long long)erros);
+  CHECAR(maximo < 700);          // sem o limite o atraso crescia sem parar (5,7 s em 16 s no iphone-falso)
+  CHECAR(descartados > 0);
+  CHECAR_IGUAIS(erros, uint64_t(0));
+}
+
+TESTE(iphone_girado_para_em_pe_no_meio_da_conexao_a_fonte_segue_o_tamanho_sem_reconectar) {
+  // O iPhone sai de paisagem (1920x1080) para em pe (1080x1920) depois de 3 s: tipo 1 novo com o SPS do tamanho novo,
+  // quadro-chave, status novo. A fonte tem que passar a entregar 1080x1920 na MESMA conexao, sem erro de decodificacao.
+  SessaoFalso f({"--preset-proprio", "1080p30", "--trocar-preset-apos-s", "3", "--para", "v1080p30", "--arquivo-troca",
+                 env("FMCAM_AMOSTRAVERT")},
+                ConfigFonte{});
+  InfoAparelho info;
+  CHECAR(esperar([&] { return f.cont.quadros > 10 && f.cont.w == 1920 && f.cont.h == 1080; }, 8000));
+  CHECAR(esperar([&] { return f.cont.w == 1080 && f.cont.h == 1920; }, 12000));
+  const int q0 = f.cont.quadros;
+  CHECAR(esperar([&] { return f.cont.quadros > q0 + 30; }, 8000));  // segue entregando video em pe
+  CHECAR_IGUAIS(f.cont.w.load(), 1080);
+  CHECAR_IGUAIS(f.cont.h.load(), 1920);
+  CHECAR(esperar([&] { return f.status(info) && info.status.w == 1080 && info.status.h == 1920; }, 5000));
+  auto e = f.s->estado();
+  CHECAR(e.estado == EstadoAparelho::Conectado);
+  CHECAR_IGUAIS(e.reconexoes, 0);
+  CHECAR_IGUAIS(e.errosDecodificacao, uint64_t(0));
+  CHECAR_IGUAIS(e.largura, 1080);
+  CHECAR_IGUAIS(e.altura, 1920);
+}
+
+// ---- Varredura 1 (1.0.3) ----
+
+TESTE(controle_remoto_do_painel_chega_ao_iphone_e_status_novo_e_lido) {
+  FalsoComandos falso;
+  falso.camposExtras = ",\"lentes\":[0.5,1,2,5],\"fator\":2,\"ev_min\":-2,\"ev_max\":2,\"preset\":\"1080p30\","
+                       "\"trava_ae\":true,\"trava_af\":false,\"trava_bb\":true";
+  RegistroAparelhos reg("/tmp/fmcam_sem_usbmuxd.sock");
+  ConfigFonte cfg;
+  cfg.wifi = true;
+  cfg.wifiIp = "127.0.0.1";
+  cfg.wifiPorta = falso.porta;
+  auto s = std::make_unique<SessaoFonte>(cfg, "/tmp/fmcam_sem_usbmuxd.sock", &reg);
+  CHECAR(!reg.enviarComando("wifi:127.0.0.1", "{\"cmd\":\"ev\",\"valor\":1}"));  // ninguem segura o iPhone ainda
+  s->iniciar();
+  CHECAR(esperar([&] { return s->estado().estado == EstadoAparelho::Conectado; }));
+  InfoAparelho info;
+  CHECAR(esperar([&] { return reg.buscar("wifi:127.0.0.1", info) && info.status.temTravas; }));
+  CHECAR_IGUAIS(info.status.lentes.size(), size_t(4));
+  CHECAR(info.status.lentes.size() == 4 && info.status.lentes[0] == 0.5 && info.status.lentes[3] == 5);
+  CHECAR(info.status.fator == 2);
+  CHECAR(info.status.temFaixaEv && info.status.evMin == -2 && info.status.evMax == 2);
+  CHECAR_IGUAIS(info.status.preset, std::string("1080p30"));
+  CHECAR(info.status.travaAe && !info.status.travaAf && info.status.travaBb);
+  for (const char* c : {"{\"cmd\":\"lente\",\"fator\":5}", "{\"cmd\":\"ev\",\"valor\":-0.7}",
+                        "{\"cmd\":\"trava_af\",\"valor\":true}", "{\"cmd\":\"qualidade\",\"preset\":\"2160p30\"}"}) {
+    CHECAR(reg.enviarComando("wifi:127.0.0.1", c));
+    CHECAR(esperar([&] { return tem(falso.comandos(), c); }));
+  }
+  s->parar(3000);
+  CHECAR(!reg.enviarComando("wifi:127.0.0.1", "{\"cmd\":\"ev\",\"valor\":1}"));  // sessao parou: canal apagado
+  s.reset();  // o canal guardado (se alguem copiou) nao pode tocar a sessao destruida
+}
+
+TESTE(status_de_app_antigo_nao_liga_os_controles_remotos) {
+  FalsoComandos falso;  // status sem os campos novos
+  RegistroAparelhos reg("/tmp/fmcam_sem_usbmuxd.sock");
+  ConfigFonte cfg;
+  cfg.wifi = true;
+  cfg.wifiIp = "127.0.0.1";
+  cfg.wifiPorta = falso.porta;
+  SessaoFonte s(cfg, "/tmp/fmcam_sem_usbmuxd.sock", &reg);
+  s.iniciar();
+  InfoAparelho info;
+  CHECAR(esperar([&] { return reg.buscar("wifi:127.0.0.1", info) && info.status.iso == 125; }));
+  CHECAR(info.status.lentes.empty() && !info.status.temFaixaEv && !info.status.temTravas && info.status.preset.empty());
+  s.parar(3000);
+}
+
+TESTE(botao_testar_avalia_cabo_atraso_ida_e_volta_fps_e_descartes) {
+  StatusIphone b;
+  CHECAR(avaliarTeste(b, true).nivel == ResultadoTeste::Nivel::SemDados);  // sem medida
+  b.atrasoMs = 45;
+  b.atrasoP95Ms = 55;
+  b.idaEVoltaMs = 1.2;
+  b.canalCabo = true;
+  b.fps = 30;
+  b.fpsAlvo = 30;
+  CHECAR(avaliarTeste(b, false).nivel == ResultadoTeste::Nivel::SemDados);  // desconectado
+  auto r = avaliarTeste(b, true);
+  CHECAR(r.nivel == ResultadoTeste::Nivel::Ok && r.avisos.empty());
+  StatusIphone w = b;
+  w.canalCabo = false;
+  r = avaliarTeste(w, true);
+  CHECAR(r.nivel == ResultadoTeste::Nivel::Atencao && r.avisos.size() == 1 && r.avisos[0] == "Teste.Wifi");
+  StatusIphone a = b;
+  a.atrasoP95Ms = 200;
+  CHECAR(avaliarTeste(a, true).nivel == ResultadoTeste::Nivel::Atencao);
+  a.atrasoP95Ms = 400;
+  CHECAR(avaliarTeste(a, true).nivel == ResultadoTeste::Nivel::Ruim);
+  StatusIphone f = b;
+  f.fps = 20;
+  CHECAR(avaliarTeste(f, true).nivel == ResultadoTeste::Nivel::Atencao);
+  StatusIphone d = b;
+  d.descartados = 3;
+  CHECAR(avaliarTeste(d, true).avisos.back() == "Teste.Descartados");
+  StatusIphone i = b;
+  i.idaEVoltaMs = 35;
+  CHECAR(avaliarTeste(i, true).avisos.back() == "Teste.IdaEVolta");
+}
+
+TESTE(encaixar_mantem_o_retangulo_do_item_e_nao_toca_bounds_recorte_nem_espelho) {
+  // PIP no canto: 1920x1080 a 0,25 em (1400,780). Girou para 1080x1920: o item continua 480x270 no mesmo lugar.
+  TransformacaoItem pip;
+  pip.posX = 1400;
+  pip.posY = 780;
+  pip.escalaX = pip.escalaY = 0.25;
+  auto r = decidirEncaixe(pip, 1920, 1080);
+  CHECAR(r.aplicar && r.posX == 1400 && r.posY == 780 && r.boundsLargura == 480 && r.boundsAltura == 270);
+  TransformacaoItem comBounds = pip;
+  comBounds.temBounds = true;  // o OBS ja mantem o retangulo
+  CHECAR(!decidirEncaixe(comBounds, 1920, 1080).aplicar);
+  TransformacaoItem rec = pip;
+  rec.recortado = true;
+  CHECAR(!decidirEncaixe(rec, 1920, 1080).aplicar);
+  TransformacaoItem esp = pip;
+  esp.escalaX = -0.25;  // espelhado
+  CHECAR(!decidirEncaixe(esp, 1920, 1080).aplicar);
+  CHECAR(!decidirEncaixe(pip, 0, 0).aplicar);
+  // a regra antiga (item que enche o canvas) continua igual
+  TransformacaoItem cheio;
+  CHECAR(decidirAjuste(cheio, 1920, 1080, 1920, 1080).aplicar);
+}
+
+TESTE(opcoes_novas_normalizam_e_so_decodificacao_e_recepcao_reconectam) {
+  ConfigFonte c;
+  c.recepcao = "lixo";
+  c.aoCair = "explodir";
+  c.decodificacao = "gpu";
+  auto n = normalizar(c);
+  CHECAR(n.recepcao.empty() && n.aoCair.empty() && n.decodificacao.empty());
+  c.recepcao = "estavel";
+  c.aoCair = "imagem";
+  c.decodificacao = "sw";
+  n = normalizar(c);
+  CHECAR(n.recepcao == "estavel" && n.aoCair == "imagem" && n.decodificacao == "sw");
+  CHECAR(modoHardware("") == -1 && modoHardware("hw") == 1 && modoHardware("sw") == 0);
+  ConfigFonte a, b;
+  b.aoCair = "preta";
+  b.encaixar = false;
+  CHECAR(!mudouConexao(a, b));  // so muda o que a fonte mostra, sem reconectar
+  b.decodificacao = "hw";
+  CHECAR(mudouConexao(a, b));
+  ConfigFonte r;
+  r.recepcao = "estavel";
+  CHECAR(mudouConexao(a, r));
+  CHECAR_IGUAIS(std::string(kNomeCliente), std::string("OBS Cam Mobile Extension 1.0.4"));
+}
+
+TESTE(encaixar_nasce_ligado_so_em_fonte_nova) {
+  ValoresSalvos nova;  // fonte criada agora: nada salvo
+  CHECAR(!migrarValores(nova).encaixarDesligado);
+  ValoresSalvos antiga;
+  antiga.versao = 3;
+  antiga.existente = true;
+  CHECAR(migrarValores(antiga).encaixarDesligado);
+  CHECAR_IGUAIS(antiga.versao, kVersaoConfig);
+  ValoresSalvos escolheu;  // operador ja marcou ou desmarcou: respeita
+  escolheu.versao = 3;
+  escolheu.existente = true;
+  escolheu.temEncaixar = true;
+  CHECAR(!migrarValores(escolheu).encaixarDesligado);
+  ValoresSalvos atual;
+  atual.versao = 4;
+  atual.existente = true;
+  CHECAR(!migrarValores(atual).encaixarDesligado);
+}
+
+TESTE(decodificacao_hardware_ou_software_escolhida_na_fonte) {
+#ifdef __APPLE__
+  for (int modo : {1, 0}) {
+    Decodificador d;
+    d.definirModoHardware(modo);
+    std::string erro;
+    CHECAR(d.abrir(erro));
+    std::vector<uint8_t> todo;
+    FILE* fp = std::fopen(env("FMCAM_AMOSTRA").c_str(), "rb");
+    CHECAR(fp != nullptr);
+    if (!fp) return;
+    uint8_t buf[65536];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, fp)) > 0) todo.insert(todo.end(), buf, buf + n);
+    std::fclose(fp);
+    // a amostra e Annex B com SPS/PPS no comeco: decodifica tudo de uma vez como um "quadro-chave" e ve o modo
+    d.decodificar(todo.data(), todo.size(), true);
+    CHECAR_IGUAIS(d.usaHardware(), modo == 1);
+  }
+#endif
+}
+
+TESTE(recepcao_mais_estavel_segura_a_reserva_e_menor_atraso_nao) {
+  double atrasoNormal = -1, atrasoEstavel = -1;
+  for (int estavel = 0; estavel < 2; ++estavel) {
+    ConfigFonte cfg;
+    if (estavel) cfg.recepcao = "estavel";
+    SessaoFalso f({}, cfg);
+    CHECAR(esperar([&] { return f.cont.quadros > 60; }, 10000));
+    std::this_thread::sleep_for(3500ms);  // tres janelas de medida
+    auto e = f.s->estado();
+    (estavel ? atrasoEstavel : atrasoNormal) = e.status.atrasoMs;
+    CHECAR(e.estado == EstadoAparelho::Conectado);
+  }
+  std::fprintf(stderr, "[medicao] atraso ate o OBS: menor atraso %.1f ms, mais estavel %.1f ms\n", atrasoNormal, atrasoEstavel);
+  CHECAR(atrasoNormal >= 0 && atrasoNormal < 60);
+  CHECAR(atrasoEstavel > atrasoNormal + kReservaEstavelMs * 0.6 && atrasoEstavel < atrasoNormal + kReservaEstavelMs + 60);
+}
+
+// ---- Varredura 2 ----
+
+TESTE(predefinicao_fixada_com_iphone_em_pe_nao_diz_que_entrega_menos) {
+  // Antes: a conta comparava a altura do quadro (1920 em pe) com a da predefinicao (1080) e as propriedades mostravam
+  // "(pedido 1080p30)" com o iPhone entregando exatamente 1080p30, so que em pe.
+  PredefinicaoInfo p;
+  CHECAR(infoPredefinicao("1080p30", p));
+  CHECAR(p.altura != 1920);  // a conta antiga (altura do pedido contra altura entregue) dava "menos que o pedido" em pe
+  CHECAR(!entregaMenorQuePedido("1080p30", 1080, 1920, 30));
+  CHECAR(!entregaMenorQuePedido("1080p30", 1920, 1080, 30));
+  CHECAR(!entregaMenorQuePedido("2160p30", 2160, 3840, 30));
+  // o que de fato e menos continua aparecendo
+  CHECAR(entregaMenorQuePedido("2160p30", 1920, 1080, 30));
+  CHECAR(entregaMenorQuePedido("1080p120", 1080, 1920, 60));
+  CHECAR(!entregaMenorQuePedido("", 1280, 720, 30));
+  CHECAR(!entregaMenorQuePedido("1080p30", 0, 0, 0));
+}
+
+TESTE(quando_o_iphone_cair_trocado_com_o_iphone_ja_caido_vale_na_hora) {
+  // Antes a opcao so valia na proxima queda (o guia diz "vale na hora").
+  CHECAR(aplicarQuedaAgora("", "preta", false, true));
+  CHECAR(aplicarQuedaAgora("preta", "imagem", false, true));
+  CHECAR(aplicarQuedaAgora("", "imagem", false, true));
+  CHECAR(!aplicarQuedaAgora("", "preta", true, true));    // conectado: so na proxima queda
+  CHECAR(!aplicarQuedaAgora("", "preta", false, false));  // nunca teve video: nada a cobrir
+  CHECAR(!aplicarQuedaAgora("preta", "preta", false, true));
+  CHECAR(!aplicarQuedaAgora("preta", "", false, true));   // manter: o ultimo quadro ja saiu da tela
+}
+
+TESTE(estado_com_iphone_caido_diz_o_que_a_fonte_mostra) {
+  // Antes era sempre "segurando o ultimo quadro", mesmo com tela preta ou imagem na tela.
+  CHECAR_IGUAIS(std::string(chaveTextoQueda("")), std::string("Estado.SegurandoQuadro"));
+  CHECAR_IGUAIS(std::string(chaveTextoQueda("preta")), std::string("Estado.MostrandoPreta"));
+  CHECAR_IGUAIS(std::string(chaveTextoQueda("imagem")), std::string("Estado.MostrandoImagem"));
+}
+
+TESTE(fonte_removida_durante_o_handshake_nao_deixa_o_iphone_reservado) {
+  // Antes: o "Conectado" que ja tinha passado da checagem de `parando` reservava o iPhone depois que o parar() limpou as
+  // reservas. A sessao acabava e o registro ficava com dona morta: painel "em uso" e outra fonte "ocupado" para sempre.
+  Cenario c;
+  c.ligar(1, 1);
+  RegistroAparelhos reg(c.sock);
+  reg.iniciar();
+  CHECAR(esperar([&] { return reg.listar().size() == 1; }));
+  const int antes = SessaoFonte::entradasNoAtrasoDeTeste();
+  SessaoFonte::definirAtrasoDeTesteConectadoMs(30);  // termina antes da espera de 50 ms do parar da conexao
+  {
+    SessaoFonte s(cfgPara("UDID-1"), c.sock, &reg);
+    s.iniciar();
+    CHECAR(esperar([&] { return SessaoFonte::entradasNoAtrasoDeTeste() > antes; }));
+    s.parar(0);  // remove a fonte enquanto o "Conectado" esta no meio do caminho
+  }
+  CHECAR(aguardarEncerramentos(5000));
+  SessaoFonte::definirAtrasoDeTesteConectadoMs(0);
+  InfoAparelho i;
+  CHECAR(reg.buscar("UDID-1", i));
+  std::fprintf(stderr, "[medicao] depois de remover: fontes=%d estado=%s\n", i.fontes, chaveEstado(i.estado));
+  CHECAR_IGUAIS(i.fontes, 0);
+  // e uma fonte nova no mesmo iPhone conecta (antes ficava "ocupado: outra fonte do OBS ja usa este iPhone")
+  Contador a;
+  SessaoFonte nova(cfgPara("UDID-1"), c.sock, &reg);
+  nova.definirCallbacks(a.cb(), nullptr);
+  nova.iniciar();
+  CHECAR(esperar([&] { return a.quadros > 5; }));
+  nova.parar(3000);
+  reg.parar();
+}
+
+TESTE(painel_lista_o_bitrate_real_do_iphone_e_os_mesmos_do_app) {
+  // Antes: o painel tinha 25 Mbps (o app do iPhone nao tem, e o painel Qualidade dele ficava sem nada marcado) e um
+  // bitrate fora da lista deixava o combo no item anterior, que o "Aplicar" mandava junto com a resolucao.
+  const std::vector<int64_t> padrao = {6000000, 10000000, 15000000, 20000000, 30000000};
+  CHECAR(opcoesDeBitrate(0) == padrao);
+  CHECAR(opcoesDeBitrate(10000000) == padrao);
+  auto v = opcoesDeBitrate(8000000);
+  CHECAR_IGUAIS(v.size(), size_t(6));
+  CHECAR_IGUAIS(v[1], int64_t(8000000));  // em ordem
+  CHECAR(std::find(padrao.begin(), padrao.end(), int64_t(25000000)) == padrao.end());
 }

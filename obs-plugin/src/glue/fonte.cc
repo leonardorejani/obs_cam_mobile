@@ -1,5 +1,6 @@
 // Fonte de video assincrona "OBS Cam Mobile Extension" (id fmcam_fonte). Cola do libobs: toda a logica de conexao,
 // estado e escolha do aparelho esta em src/logica.
+#include <graphics/image-file.h>
 #include <obs-module.h>
 #include <util/base.h>
 #include <util/platform.h>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <vector>
 
 #include "ajuste_itens.h"
 #include "config_fonte.h"
@@ -32,6 +34,17 @@ struct Fonte {
   EstadoSessao ultimo;
   std::string ultimoLog;
   int largura = 0, altura = 0;  // do ultimo quadro entregue (so a thread da conexao mexe)
+  std::atomic<bool> encaixar{true};
+  // "Quando o iPhone cair" (1.0.3): o que mostrar quando a conexao cai depois de ter tido video.
+  std::string aoCair;            // com m
+  std::vector<uint8_t> imagem;   // com m: pixels da imagem escolhida (decodificada uma vez, ao salvar)
+  uint32_t imagemL = 0, imagemA = 0;
+  video_format imagemFmt = VIDEO_FORMAT_BGRA;
+  bool conectadaAntes = false;   // com m: houve video desde a ultima queda
+  // Status ao vivo nas propriedades: texto da ultima vez que as propriedades foram recarregadas por causa dele.
+  std::string ultimoStatusTexto;  // com m
+  uint64_t proximoStatusNs = 0;   // so a thread da conexao
+  std::atomic<uint64_t> ultimaEntregaNs{0};  // os_gettime_ns do ultimo quadro entregue ao OBS (medicao, medir_obs)
 };
 
 bool tamanhoCanvas(int& w, int& h) {
@@ -59,8 +72,19 @@ void aplicarBounds(obs_sceneitem_t* it, const AjusteBounds& a) {
 struct CtxAjuste {
   obs_source_t* src;
   int antesL, antesA, canvasL, canvasA;
-  int ajustados = 0;
+  bool encaixar = false;
+  int encL = 0, encA = 0;  // tamanho antigo para o encaixe
+  int ajustados = 0, encaixados = 0;
 };
+
+void aplicarEncaixe(obs_sceneitem_t* it, const AjusteBounds& a) {
+  vec2 b = {static_cast<float>(a.boundsLargura), static_cast<float>(a.boundsAltura)};
+  obs_sceneitem_defer_update_begin(it);
+  obs_sceneitem_set_bounds_type(it, OBS_BOUNDS_SCALE_INNER);
+  obs_sceneitem_set_bounds_alignment(it, OBS_ALIGN_CENTER);
+  obs_sceneitem_set_bounds(it, &b);
+  obs_sceneitem_defer_update_end(it);  // posicao, alinhamento e rotacao ficam como estavam
+}
 
 bool aoItem(obs_scene_t*, obs_sceneitem_t* it, void* p) {
   auto* c = static_cast<CtxAjuste*>(p);
@@ -83,6 +107,13 @@ bool aoItem(obs_scene_t*, obs_sceneitem_t* it, void* p) {
   if (a.aplicar) {
     aplicarBounds(it, a);
     ++c->ajustados;
+    return true;
+  }
+  if (!c->encaixar) return true;
+  AjusteBounds e = decidirEncaixe(t, c->encL, c->encA);
+  if (e.aplicar) {
+    aplicarEncaixe(it, e);
+    ++c->encaixados;
   }
   return true;
 }
@@ -96,15 +127,33 @@ bool aoCena(void* p, obs_source_t* cena) {
 // ter bounds do canvas, entao a troca de predefinicao nao encolhe a imagem no canto.
 void acompanharResolucao(Fonte* f, int w, int h) {
   if (w == f->largura && h == f->altura) return;
+  // Regra antiga (item que enche o canvas): como sempre foi, com o tamanho anterior desta fonte ou o proprio quadro.
   int antesL = f->largura ? f->largura : w, antesA = f->altura ? f->altura : h;
+  // Encaixar: no primeiro quadro desde que a fonte nasceu (OBS aberto agora), o tamanho do video da ultima sessao fica
+  // salvo, entao girar o iPhone com o OBS fechado tambem mantem o item no lugar.
+  int encL = antesL, encA = antesA;
+  obs_data_t* s = obs_source_get_settings(f->src);
+  if (!f->largura || !f->altura) {
+    int sl = static_cast<int>(obs_data_get_int(s, "ultimo_w")), sa = static_cast<int>(obs_data_get_int(s, "ultimo_h"));
+    if (sl > 0 && sa > 0) encL = sl, encA = sa;
+  }
+  obs_data_set_int(s, "ultimo_w", w);
+  obs_data_set_int(s, "ultimo_h", h);
+  obs_data_release(s);
   f->largura = w;
   f->altura = h;
   CtxAjuste c{f->src, antesL, antesA, 0, 0};
+  c.encaixar = f->encaixar && (encL != w || encA != h);
+  c.encL = encL;
+  c.encA = encA;
   if (!tamanhoCanvas(c.canvasL, c.canvasA)) return;
   obs_enum_scenes(aoCena, &c);
   if (c.ajustados)
     blog(LOG_INFO, "[fmcam] '%s': %dx%d, %d item(ns) de cena que enchiam o canvas agora usam bounds do canvas",
          obs_source_get_name(f->src), w, h, c.ajustados);
+  if (c.encaixados)
+    blog(LOG_INFO, "[fmcam] '%s': %dx%d, %d item(ns) de cena mantiveram o retangulo na tela (encaixar)",
+         obs_source_get_name(f->src), w, h, c.encaixados);
 }
 
 ConfigFonte lerConfig(obs_data_t* d) {
@@ -116,6 +165,11 @@ ConfigFonte lerConfig(obs_data_t* d) {
   c.bitrateKbps = static_cast<int>(obs_data_get_int(d, "bitrate"));
   c.wifi = obs_data_get_bool(d, "wifi");
   c.wifiIp = obs_data_get_string(d, "wifi_ip");
+  c.recepcao = obs_data_get_string(d, "recepcao");
+  c.aoCair = obs_data_get_string(d, "ao_cair");
+  c.imagemQueda = obs_data_get_string(d, "imagem_queda");
+  c.decodificacao = obs_data_get_string(d, "decodificacao");
+  c.encaixar = obs_data_get_bool(d, "encaixar");
   return normalizar(c);
 }
 
@@ -132,8 +186,149 @@ const char* textoEstado(EstadoAparelho e) {
   return "";
 }
 
+std::string textoTempIphone(const std::string& t) {
+  if (t.empty()) return "";
+  std::string chave = "Painel.Temp." + t;
+  const char* s = T(chave.c_str());
+  return chave == s ? t : s;
+}
+
+// Linhas do status ao vivo nas propriedades: canal, formato, atraso medido, fps, bitrate, bateria, temperatura.
+std::string textoStatusAoVivo(const EstadoSessao& e, const ConfigFonte& cfg) {
+  if (e.estado != EstadoAparelho::Conectado) return "";
+  const StatusIphone& s = e.status;
+  char b[160];
+  std::string t;
+  bool wifi = cfg.wifi || !cfg.wifiId.empty();
+  t += std::string(T("Status.Canal")) + ": " +
+       (wifi ? T("Aparelho.Wifi") : e.pelaRede ? T("Status.CanalRede") : T("Aparelho.Cabo"));
+  std::snprintf(b, sizeof b, "\n%s: %dx%d @ %g fps%s", T("Painel.Formato"), e.largura, e.altura, e.respFps,
+                e.hardware ? (std::string(" (") + T("Status.Hardware") + ")").c_str() : "");
+  t += b;
+  if (s.atrasoMs >= 0) {
+    std::snprintf(b, sizeof b, "\n%s: %.0f ms (p95 %.0f ms)", T("Status.Atraso"), s.atrasoMs, s.atrasoP95Ms);
+    t += b;
+  }
+  std::snprintf(b, sizeof b, "\n%s: %.0f", T("Status.Fps"), e.fps);
+  t += b;
+  if (s.bitrate > 0 || s.kbps > 0) {
+    std::snprintf(b, sizeof b, "\n%s: %.1f Mbps (%s %.1f)", T("Painel.Bitrate"), s.bitrate / 1e6, T("Status.Medido"),
+                  s.kbps / 1000.0);
+    t += b;
+  }
+  if (s.bateria >= 0) {
+    std::snprintf(b, sizeof b, "\n%s: %d%%%s", T("Painel.Bateria"), static_cast<int>(s.bateria * 100 + 0.5),
+                  s.carregando ? (std::string(" (") + T("Painel.Carregando") + ")").c_str() : "");
+    t += b;
+  }
+  if (!s.temp.empty()) t += "\n" + std::string(T("Painel.Temperatura")) + ": " + textoTempIphone(s.temp);
+  return t;
+}
+
+// Arredonda o que muda a toda hora (atraso de 5 em 5 ms, bateria em %) para nao recarregar as propriedades a toa.
+std::string chaveStatus(const EstadoSessao& e, const ConfigFonte& cfg) {
+  EstadoSessao r = e;
+  r.fps = static_cast<int>(e.fps + 0.5);
+  if (r.status.atrasoMs >= 0) r.status.atrasoMs = static_cast<int>(e.status.atrasoMs / 5) * 5;
+  if (r.status.atrasoP95Ms >= 0) r.status.atrasoP95Ms = static_cast<int>(e.status.atrasoP95Ms / 5) * 5;
+  r.status.kbps = (e.status.kbps / 500) * 500;
+  return textoStatusAoVivo(r, cfg);
+}
+
+// A cada 2 s com video: se o status visivel mudou, recarrega as propriedades desta fonte (status ao vivo).
+void talvezRecarregarStatus(Fonte* f) {
+  uint64_t agora = os_gettime_ns();
+  if (agora < f->proximoStatusNs) return;
+  f->proximoStatusNs = agora + 2000000000ull;
+  std::string k;
+  {
+    std::lock_guard<std::mutex> l(f->m);
+    if (!f->sessao) return;
+    k = chaveStatus(f->sessao->estado(), f->cfg);
+    if (k == f->ultimoStatusTexto) return;
+    f->ultimoStatusTexto = k;
+  }
+  obs_source_update_properties(f->src);
+}
+
+// "Quando o iPhone cair": tela preta (quadro preto do ultimo tamanho) ou a imagem escolhida. Manter e o padrao (nada).
+void mostrarQueda(Fonte* f) {
+  std::string modo;
+  std::vector<uint8_t> img;
+  uint32_t il = 0, ia = 0;
+  video_format ifmt = VIDEO_FORMAT_BGRA;
+  {
+    std::lock_guard<std::mutex> l(f->m);
+    modo = f->aoCair;
+    if (modo == "imagem") {
+      img = f->imagem;
+      il = f->imagemL;
+      ia = f->imagemA;
+      ifmt = f->imagemFmt;
+    }
+  }
+  blog(LOG_INFO, "[fmcam] '%s': iPhone caiu, mostrando %s", obs_source_get_name(f->src),
+       modo == "imagem" && !img.empty() ? "a imagem escolhida" : modo == "preta" || modo == "imagem" ? "tela preta" : "o ultimo quadro");
+  obs_source_frame fr = {};
+  fr.timestamp = os_gettime_ns();
+  if (modo == "imagem" && !img.empty()) {
+    fr.width = il;
+    fr.height = ia;
+    fr.format = ifmt;
+    fr.full_range = true;
+    fr.data[0] = img.data();
+    fr.linesize[0] = il * 4;
+    obs_source_output_video(f->src, &fr);
+    return;
+  }
+  if (modo != "preta" && modo != "imagem") return;
+  // preta (ou imagem que nao abriu): I420 preto no ultimo tamanho do video
+  uint32_t w = f->largura > 0 ? static_cast<uint32_t>(f->largura) : 1920, h = f->altura > 0 ? static_cast<uint32_t>(f->altura) : 1080;
+  std::vector<uint8_t> y(static_cast<size_t>(w) * h, 16), uv(static_cast<size_t>((w + 1) / 2) * ((h + 1) / 2), 128);
+  fr.width = w;
+  fr.height = h;
+  fr.format = VIDEO_FORMAT_I420;
+  fr.data[0] = y.data();
+  fr.data[1] = uv.data();
+  fr.data[2] = uv.data();
+  fr.linesize[0] = w;
+  fr.linesize[1] = fr.linesize[2] = (w + 1) / 2;
+  video_format_get_parameters_for_format(VIDEO_CS_709, VIDEO_RANGE_PARTIAL, fr.format, fr.color_matrix, fr.color_range_min,
+                                         fr.color_range_max);
+  obs_source_output_video(f->src, &fr);
+}
+
+// Decodifica a imagem de queda uma vez (ao criar e ao salvar as propriedades), na thread de quem chamou.
+void carregarImagemQueda(Fonte* f, const std::string& caminho) {
+  std::vector<uint8_t> px;
+  uint32_t l = 0, a = 0;
+  video_format fmt = VIDEO_FORMAT_BGRA;
+  if (!caminho.empty()) {
+    gs_image_file_ex_t im;
+    gs_image_file_ex_init(&im, caminho.c_str(), GS_IMAGE_ALPHA_STRAIGHT);
+    if (im.loaded && im.texture_data && im.cx > 0 && im.cy > 0 &&
+        (im.format == GS_BGRA || im.format == GS_RGBA || im.format == GS_BGRX)) {
+      l = im.cx;
+      a = im.cy;
+      fmt = im.format == GS_RGBA ? VIDEO_FORMAT_RGBA : im.format == GS_BGRX ? VIDEO_FORMAT_BGRX : VIDEO_FORMAT_BGRA;
+      px.assign(im.texture_data, im.texture_data + static_cast<size_t>(l) * a * 4);
+    } else {
+      blog(LOG_WARNING, "[fmcam] '%s': nao abriu a imagem de queda '%s'", obs_source_get_name(f->src), caminho.c_str());
+    }
+    obs_enter_graphics();  // o free destroi a textura (nula aqui) e reclama fora do contexto grafico
+    gs_image_file_ex_free(&im);
+    obs_leave_graphics();
+  }
+  std::lock_guard<std::mutex> lk(f->m);
+  f->imagem = std::move(px);
+  f->imagemL = l;
+  f->imagemA = a;
+  f->imagemFmt = fmt;
+}
+
 void entregarQuadro(Fonte* f, const QuadroSaida& q) {
   acompanharResolucao(f, q.largura, q.altura);
+  talvezRecarregarStatus(f);
   obs_source_frame fr = {};
   fr.width = static_cast<uint32_t>(q.largura);
   fr.height = static_cast<uint32_t>(q.altura);
@@ -148,6 +343,7 @@ void entregarQuadro(Fonte* f, const QuadroSaida& q) {
   video_format_get_parameters_for_format(cs, q.faixaCompleta ? VIDEO_RANGE_FULL : VIDEO_RANGE_PARTIAL, fr.format,
                                          fr.color_matrix, fr.color_range_min, fr.color_range_max);
   obs_source_output_video(f->src, &fr);  // copia os planos: o AVFrame pode ser reaproveitado ja
+  f->ultimaEntregaNs = fr.timestamp;
 }
 
 // "iPhone 15 Pro Max" (ou "... (2)" se houver dois do mesmo modelo). Sem registro, so o nome comercial.
@@ -177,8 +373,10 @@ void aoEstado(Fonte* f, const EstadoSessao& e) {
   std::string rot = e.nome.empty() && e.modelo.empty() ? e.udid : rotuloIphone(e.udid, e.modelo);
   std::string linha = std::string(chaveEstado(e.estado)) + "|" + e.mensagem + "|" + rot;
   bool novo;
+  std::string aoCair;
   {
     std::lock_guard<std::mutex> l(f->m);
+    aoCair = f->aoCair;
     f->ultimo = e;
     novo = linha != f->ultimoLog;
     f->ultimoLog = linha;
@@ -203,11 +401,24 @@ void aoEstado(Fonte* f, const EstadoSessao& e) {
     if (e.estado == EstadoAparelho::Conectado)
       blog(nivel, "[fmcam] '%s': conectado a %s (%dx%d)", nomeFonte.c_str(), rot.c_str(), e.largura, e.altura);
     else if (e.jaTeveQuadro)
-      blog(nivel, "[fmcam] '%s': %s, segurando o ultimo quadro (%s)", nomeFonte.c_str(), chaveEstado(e.estado), e.mensagem.c_str());
+      blog(nivel, "[fmcam] '%s': %s, %s (%s)", nomeFonte.c_str(), chaveEstado(e.estado),
+           std::string(chaveTextoQueda(aoCair)) == "Estado.SegurandoQuadro" ? "segurando o ultimo quadro"
+                                                                                   : "mostrando a opcao de queda",
+           e.mensagem.c_str());
     else
       blog(nivel, "[fmcam] '%s': %s (%s)", nomeFonte.c_str(), chaveEstado(e.estado), e.mensagem.c_str());
   }
   if (novo) recarregarPropriedades();
+  bool cair = false;
+  {
+    std::lock_guard<std::mutex> l(f->m);
+    if (e.estado == EstadoAparelho::Conectado) f->conectadaAntes = true;
+    else if (f->conectadaAntes && e.jaTeveQuadro) {
+      f->conectadaAntes = false;
+      cair = !f->aoCair.empty();
+    }
+  }
+  if (cair) mostrarQueda(f);
 }
 
 // "activate"/"deactivate" do libobs: a fonte entrou ou saiu do Programa. Em modo estudio a Previa NAO ativa,
@@ -253,14 +464,37 @@ void estadoProc(void* dados, calldata_t* cd) {
     std::lock_guard<std::mutex> l(f->m);
     if (f->sessao) e = f->sessao->estado();
   }
-  char b[768];
+  char b[1400];
   std::snprintf(b, sizeof b,
                 "{\"estado\":\"%s\",\"udid\":\"%s\",\"nome\":\"%s\",\"modelo\":\"%s\",\"quadros\":%llu,\"fps\":%.1f,"
-                "\"w\":%d,\"h\":%d,\"reconexoes\":%d,\"erros\":%llu,\"noar\":%s}",
+                "\"w\":%d,\"h\":%d,\"reconexoes\":%d,\"erros\":%llu,\"noar\":%s,\"hardware\":%s,\"descartados\":%llu,"
+                "\"atraso_ms\":%.1f,\"atraso_p95_ms\":%.1f,\"ida_e_volta_ms\":%.1f,\"atraso_cano_ms\":%.1f,\"cabo\":%s,\"ultima_entrega_ns\":%llu,"
+                "\"fator\":%g,\"bias\":%g,\"trava_ae\":%s,\"trava_af\":%s,\"trava_bb\":%s,\"preset\":\"%s\",\"bitrate\":%lld}",
                 chaveEstado(e.estado), fmappcam::escaparJson(e.udid).c_str(), fmappcam::escaparJson(e.nome).c_str(),
                 fmappcam::escaparJson(e.modelo).c_str(), static_cast<unsigned long long>(e.quadros), e.fps, e.largura,
-                e.altura, e.reconexoes, static_cast<unsigned long long>(e.errosDecodificacao), e.noAr ? "true" : "false");
+                e.altura, e.reconexoes, static_cast<unsigned long long>(e.errosDecodificacao), e.noAr ? "true" : "false",
+                e.hardware ? "true" : "false", static_cast<unsigned long long>(e.quadrosDescartados), e.status.atrasoMs,
+                e.status.atrasoP95Ms, e.status.idaEVoltaMs, e.atrasoCanoMs, e.status.canalCabo ? "true" : "false",
+                static_cast<unsigned long long>(f->ultimaEntregaNs.load()), e.status.fator, e.status.bias,
+                e.status.travaAe ? "true" : "false", e.status.travaAf ? "true" : "false", e.status.travaBb ? "true" : "false",
+                fmappcam::escaparJson(e.status.preset).c_str(), static_cast<long long>(e.status.bitrate));
   calldata_set_string(cd, "json", b);
+}
+
+// "fmcam_comando": manda um comando tipo 4 (controle remoto) ao iPhone desta fonte. O painel usa o registro, isto e
+// para automacao e para a medicao no aparelho (medir_obs).
+void comandoProc(void* dados, calldata_t* cd) {
+  auto* f = static_cast<Fonte*>(dados);
+  const char* json = nullptr;
+  calldata_get_string(cd, "json", &json);
+  std::string udid;
+  {
+    std::lock_guard<std::mutex> l(f->m);
+    if (f->sessao) udid = f->sessao->estado().udid;
+  }
+  auto* reg = registroGlobal();
+  bool ok = json && reg && !udid.empty() && reg->enviarComando(udid, json);
+  calldata_set_bool(cd, "ok", ok);
 }
 
 // Fontes salvas antes desta versao guardam "wide", 1080p30 e 10000 kbps so porque eram os padroes antigos, e isso
@@ -276,6 +510,10 @@ void migrarConfig(obs_data_t* settings, obs_source_t* src) {
   v.preset = obs_data_get_string(settings, "predefinicao");
   v.temBitrate = obs_data_has_user_value(settings, "bitrate");
   v.bitrateKbps = static_cast<int>(obs_data_get_int(settings, "bitrate"));
+  v.temEncaixar = obs_data_has_user_value(settings, "encaixar");
+  // Fonte que ja existia: versao gravada (1 a 3) ou algum valor salvo por versao antiga. Fonte nova chega vazia.
+  v.existente = v.versao > 0 || obs_data_has_user_value(settings, "udid") || obs_data_has_user_value(settings, "nome_cache") ||
+                v.temLente || v.temPreset || v.temBitrate || obs_data_has_user_value(settings, "wifi");
   ResultadoMigracao r = migrarValores(v);
   const char* nome = obs_source_get_name(src);
   if (r.lente) {
@@ -290,6 +528,10 @@ void migrarConfig(obs_data_t* settings, obs_source_t* src) {
     obs_data_set_int(settings, "bitrate", 0);
     blog(LOG_INFO, "[fmcam] '%s': bitrate 10000 kbps salvo era so o padrao antigo, migrado para 'Definido no iPhone'", nome);
   }
+  if (r.encaixarDesligado) {
+    obs_data_set_bool(settings, "encaixar", false);
+    blog(LOG_INFO, "[fmcam] '%s': fonte de versao anterior, 'Encaixar na tela sozinho' fica desligado (como antes)", nome);
+  }
   obs_data_set_int(settings, "versao_cfg", v.versao);
 }
 
@@ -298,9 +540,13 @@ void* criar(obs_data_t* settings, obs_source_t* src) {
   auto* f = new Fonte();
   f->src = src;
   f->cfg = lerConfig(settings);
+  f->encaixar = f->cfg.encaixar;
+  f->aoCair = f->cfg.aoCair;
+  if (f->cfg.aoCair == "imagem") carregarImagemQueda(f, f->cfg.imagemQueda);
   obs_source_set_async_unbuffered(src, true);
   obs_source_set_async_decoupled(src, false);
   proc_handler_add(obs_source_get_proc_handler(src), "void fmcam_estado(out string json)", estadoProc, f);
+  proc_handler_add(obs_source_get_proc_handler(src), "void fmcam_comando(in string json, out bool ok)", comandoProc, f);
   signal_handler_t* sh = obs_source_get_signal_handler(src);
   signal_handler_connect(sh, "activate", aoAtivar, f);
   signal_handler_connect(sh, "deactivate", aoDesativar, f);
@@ -327,17 +573,29 @@ void destruir(void* dados) {
 void atualizar(void* dados, obs_data_t* settings) {
   auto* f = static_cast<Fonte*>(dados);
   ConfigFonte nova = lerConfig(settings);
+  f->encaixar = nova.encaixar;
+  if (nova.aoCair == "imagem") carregarImagemQueda(f, nova.imagemQueda);
   std::unique_ptr<SessaoFonte> velha;
+  bool quedaAgora = false;
   {
     std::lock_guard<std::mutex> l(f->m);
+    // Com o iPhone ja caido a opcao nova vale na hora (docs/GUIA-OPERADOR.md), nao so na proxima queda.
+    quedaAgora = aplicarQuedaAgora(f->aoCair, nova.aoCair, f->ultimo.estado == EstadoAparelho::Conectado, f->ultimo.jaTeveQuadro);
+    f->aoCair = nova.aoCair;
+    if (nova.aoCair != "imagem") {
+      f->imagem.clear();
+      f->imagemL = f->imagemA = 0;
+    }
     bool reconectar = mudouConexao(f->cfg, nova) || !f->sessao;
     f->cfg = nova;
-    if (!reconectar) return;
-    velha = std::move(f->sessao);
-    f->ultimoLog.clear();
-    iniciarSessao(f);  // a nova ja nasce; se o iPhone ainda estiver fechando a velha, ela tenta de novo sozinha
+    if (reconectar) {
+      velha = std::move(f->sessao);
+      f->ultimoLog.clear();
+      iniciarSessao(f);  // a nova ja nasce; se o iPhone ainda estiver fechando a velha, ela tenta de novo sozinha
+    }
   }
   if (velha) velha->parar(0);
+  else if (quedaAgora) mostrarQueda(f);
 }
 
 void padroes(obs_data_t* d) {
@@ -346,6 +604,10 @@ void padroes(obs_data_t* d) {
   obs_data_set_default_string(d, "lente", "");  // manter a lente do iPhone
   obs_data_set_default_int(d, "bitrate", 0);  // definido no iPhone
   obs_data_set_default_bool(d, "wifi", false);
+  obs_data_set_default_string(d, "recepcao", "");       // menor atraso
+  obs_data_set_default_string(d, "ao_cair", "");        // manter o ultimo quadro
+  obs_data_set_default_string(d, "decodificacao", "");  // automatica
+  obs_data_set_default_bool(d, "encaixar", true);       // fonte nova; as de versao anterior gravam false na migracao
 }
 
 bool botaoAtualizar(obs_properties_t*, obs_property_t*, void*) { return true; }
@@ -369,15 +631,18 @@ obs_properties_t* propriedades(void* dados) {
     char b[96];
     std::snprintf(b, sizeof b, " - %s %dx%d @ %g fps", T("Estado.Entrega"), est.respLargura, est.respAltura, est.respFps);
     txt += b;
-    PredefinicaoInfo pedido;
-    if (infoPredefinicao(cfg.preset, pedido) &&
-        (pedido.altura != est.respAltura || std::abs(pedido.fps - est.respFps) > 0.5))
+    if (entregaMenorQuePedido(cfg.preset, est.respLargura, est.respAltura, est.respFps))
       txt += " (" + std::string(T("Estado.Pedido")) + " " + cfg.preset + ")";
     if (est.noAr) txt += " - " + std::string(T("Estado.NoAr"));
   }
   else if (est.jaTeveQuadro)
-    txt += " - " + std::string(T("Estado.SegurandoQuadro"));
+    txt += " - " + std::string(T(chaveTextoQueda(cfg.aoCair)));
   obs_property_set_description(info, txt.c_str());
+  std::string aoVivo = textoStatusAoVivo(est, cfg);
+  if (!aoVivo.empty()) {
+    obs_property_t* st = obs_properties_add_text(p, "status_ao_vivo", "", OBS_TEXT_INFO);
+    obs_property_set_description(st, aoVivo.c_str());
+  }
   obs_property_text_set_info_type(info, est.estado == EstadoAparelho::Conectado ? OBS_TEXT_INFO_NORMAL
                                         : (est.estado == EstadoAparelho::Procurando || est.estado == EstadoAparelho::SemFonte)
                                             ? OBS_TEXT_INFO_NORMAL : OBS_TEXT_INFO_WARNING);
@@ -448,6 +713,23 @@ obs_properties_t* propriedades(void* dados) {
 
   obs_properties_add_bool(p, "wifi", T("Wifi"));
   obs_properties_add_text(p, "wifi_ip", T("Wifi.Ip"), OBS_TEXT_DEFAULT);
+
+  obs_property_t* rec = obs_properties_add_list(p, "recepcao", T("Recepcao"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+  obs_property_list_add_string(rec, T("Recepcao.MenorAtraso"), "");
+  obs_property_list_add_string(rec, T("Recepcao.Estavel"), "estavel");
+  obs_property_set_long_description(rec, T("Recepcao.Dica"));
+  obs_property_t* cai = obs_properties_add_list(p, "ao_cair", T("AoCair"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+  obs_property_list_add_string(cai, T("AoCair.Manter"), "");
+  obs_property_list_add_string(cai, T("AoCair.Preta"), "preta");
+  obs_property_list_add_string(cai, T("AoCair.Imagem"), "imagem");
+  obs_properties_add_path(p, "imagem_queda", T("AoCair.Arquivo"), OBS_PATH_FILE, "Imagens (*.png *.jpg *.jpeg *.bmp *.gif);;*.*",
+                          nullptr);
+  obs_property_t* dec = obs_properties_add_list(p, "decodificacao", T("Decodificacao"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+  obs_property_list_add_string(dec, T("Decodificacao.Auto"), "");
+  obs_property_list_add_string(dec, T("Decodificacao.Hardware"), "hw");
+  obs_property_list_add_string(dec, T("Decodificacao.Software"), "sw");
+  obs_property_t* enc = obs_properties_add_bool(p, "encaixar", T("Encaixar"));
+  obs_property_set_long_description(enc, T("Encaixar.Dica"));
   return p;
 }
 

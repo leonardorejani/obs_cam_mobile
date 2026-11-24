@@ -1,7 +1,7 @@
 // libobs de verdade, sem video e sem janela: obs_startup, carrega o modulo instalado, cria 4 fontes
 // "fmcam_fonte" apontadas para 4 iphone-falso (pelo usbmuxd-falso) e confere quadros, lista de aparelhos
 // nas propriedades, queda e volta de um iPhone e o fechamento sem travar.
-// Uso: teste_headless_obs <fmcam-extension.plugin> <iphone-falso> <amostra.h264> <amostra720.h264>
+// Uso: teste_headless_obs <fmcam-extension.plugin> <iphone-falso> <amostra.h264> <amostra720.h264> <amostra_vertical.h264>
 #include <obs.h>
 #include <util/base.h>
 
@@ -27,12 +27,14 @@ static void checar(bool ok, const std::string& m) {
 
 static std::mutex g_mLog;
 static std::atomic<int> g_removidas{0};
+static std::atomic<int> g_telaPreta{0};
 static void logObs(int nivel, const char* fmt, va_list args, void*) {
   char b[1024];
   vsnprintf(b, sizeof b, fmt, args);
   if (std::string(b).find("[fmcam]") != std::string::npos) {
     std::lock_guard<std::mutex> l(g_mLog);  // o OBS loga de varias threads
     if (std::string(b).find("fonte removida") != std::string::npos) ++g_removidas;
+    if (std::string(b).find("mostrando tela preta") != std::string::npos) ++g_telaPreta;
     std::printf("    obs-log(%d): %s\n", nivel, b);
   }
 }
@@ -63,8 +65,8 @@ static bool esperar(F cond, int ms = 10000) {
 }
 
 int main(int argc, char** argv) {
-  if (argc < 5) return 2;
-  std::string bundle = argv[1], falso = argv[2], amostra = argv[3], amostra720 = argv[4];
+  if (argc < 6) return 2;
+  std::string bundle = argv[1], falso = argv[2], amostra = argv[3], amostra720 = argv[4], amostraVert = argv[5];
   std::string sock = "/tmp/fmcam_headless_" + std::to_string(getpid()) + ".sock";
   UsbmuxdFalso fake(sock);
   std::string erro;
@@ -284,6 +286,88 @@ int main(int argc, char** argv) {
     ipY.matar();
   }
 
+  // ---- 1.0.3: "Encaixar na tela sozinho" em fonte nova: PIP sem bounds mantem o retangulo quando o iPhone gira ----
+  {
+    obs_scene_t* cena = obs_scene_create("cena encaixar");
+    obs_data_t* de = obs_data_create();
+    obs_data_set_string(de, "udid", "UDID-E");
+    obs_data_set_int(de, "versao_cfg", 4);  // fonte nova (como o painel cria)
+    obs_data_set_bool(de, "encaixar", true);
+    obs_data_set_string(de, "ao_cair", "preta");
+    obs_source_t* fe = obs_source_create("fmcam_fonte", "OBS Cam Mobile E", de, nullptr);
+    obs_data_release(de);
+    obs_sceneitem_t* pip = obs_scene_add(cena, fe);
+    vec2 ppos = {1400, 780}, pesc = {0.25f, 0.25f};
+    obs_sceneitem_set_alignment(pip, OBS_ALIGN_LEFT | OBS_ALIGN_TOP);
+    obs_sceneitem_set_bounds_type(pip, OBS_BOUNDS_NONE);
+    obs_sceneitem_set_pos(pip, &ppos);
+    obs_sceneitem_set_scale(pip, &pesc);
+    uint16_t pe;
+    auto ipE = fmtest::iphoneFalso(falso, amostra, "Camera E", "iPhone 15 Pro", "uuid-e", pe,
+                                   {"--preset-proprio", "1080p30", "--trocar-preset-apos-s", "4", "--para", "v1080p30",
+                                    "--arquivo-troca", amostraVert});
+    fake.anexar({40, "UDID-E", "USB"}, "127.0.0.1", pe);
+    checar(esperar([&] { return numero(estado(fe), "w") == 1920 && numero(estado(fe), "quadros") > 5; }, 15000), "fonte E em 1920x1080");
+    checar(obs_sceneitem_get_bounds_type(pip) == OBS_BOUNDS_NONE, "PIP sem bounds antes de girar (nada muda sem troca de tamanho)");
+    checar(esperar([&] { return numero(estado(fe), "w") == 1080 && numero(estado(fe), "h") == 1920; }, 15000), "fonte E girou para 1080x1920");
+    vec2 pos, bb;
+    obs_sceneitem_get_pos(pip, &pos);
+    obs_sceneitem_get_bounds(pip, &bb);
+    std::printf("    pip depois de girar: pos %.0f,%.0f bounds_tipo %d bounds %.0fx%.0f\n", pos.x, pos.y,
+                int(obs_sceneitem_get_bounds_type(pip)), bb.x, bb.y);
+    checar(obs_sceneitem_get_bounds_type(pip) == OBS_BOUNDS_SCALE_INNER && bb.x == 480 && bb.y == 270 && pos.x == 1400 && pos.y == 780,
+           "encaixar: PIP continua 480x270 em 1400,780 com o video em pe dentro");
+    // "Quando o iPhone cair": tela preta (fonte criada com a opcao: sem video o libobs nao aplica obs_source_update)
+    ipE.matar();
+    checar(esperar([&] { return g_telaPreta > 0; }, 10000), "iPhone caiu: a fonte mostra tela preta");
+    obs_sceneitem_remove(pip);
+    obs_scene_release(cena);
+    obs_source_release(fe);
+    ipE.matar();
+  }
+
+  // ---- iPhone girado de paisagem para em pe no meio da conexao (1920x1080 -> 1080x1920, sem reconectar) ----
+  {
+    obs_scene_t* cena = obs_scene_create("cena iphone em pe");
+    obs_data_t* dv = obs_data_create();
+    obs_data_set_string(dv, "udid", "UDID-V");
+    obs_source_t* fv = obs_source_create("fmcam_fonte", "OBS Cam Mobile V", dv, nullptr);
+    obs_data_release(dv);
+    obs_sceneitem_t* cheio = obs_scene_add(cena, fv);
+    vec2 zero = {0, 0}, um = {1, 1};
+    obs_sceneitem_set_pos(cheio, &zero);
+    obs_sceneitem_set_scale(cheio, &um);
+    obs_sceneitem_set_rot(cheio, 0);
+    obs_sceneitem_set_alignment(cheio, OBS_ALIGN_LEFT | OBS_ALIGN_TOP);
+    obs_sceneitem_set_bounds_type(cheio, OBS_BOUNDS_NONE);
+    obs_sceneitem_crop sem = {0, 0, 0, 0};
+    obs_sceneitem_set_crop(cheio, &sem);
+    uint16_t pv;
+    auto ipV = fmtest::iphoneFalso(falso, amostra, "Camera V", "iPhone 17 Pro", "uuid-v", pv,
+                                   {"--preset-proprio", "1080p30", "--trocar-preset-apos-s", "4", "--para", "v1080p30",
+                                    "--arquivo-troca", amostraVert});
+    fake.anexar({40, "UDID-V", "USB"}, "127.0.0.1", pv);
+    checar(esperar([&] { return numero(estado(fv), "w") == 1920 && numero(estado(fv), "quadros") > 5; }, 15000), "fonte V comecou em 1920x1080");
+    const long reconAntes = numero(estado(fv), "reconexoes");
+    checar(esperar([&] { return numero(estado(fv), "w") == 1080 && numero(estado(fv), "h") == 1920; }, 15000),
+           "iPhone girou para em pe no meio da conexao: a fonte passou a 1080x1920");
+    std::string j = estado(fv);
+    std::printf("    fonte V depois do giro: %s\n", j.c_str());
+    checar(numero(j, "reconexoes") == reconAntes && contem(j, "\"estado\":\"conectado\"") && numero(j, "erros") == 0,
+           "o giro aconteceu na mesma conexao, sem erro de decodificacao");
+    const long q0 = numero(j, "quadros");
+    checar(esperar([&] { return numero(estado(fv), "quadros") > q0 + 30; }), "a fonte segue entregando video em pe");
+    vec2 pos, bb;
+    obs_sceneitem_get_pos(cheio, &pos);
+    obs_sceneitem_get_bounds(cheio, &bb);
+    checar(obs_sceneitem_get_bounds_type(cheio) == OBS_BOUNDS_SCALE_INNER && bb.x == 1920 && bb.y == 1080 && pos.x == 960 && pos.y == 540,
+           "item de tela cheia ficou com bounds do canvas (o video em pe cabe inteiro, centralizado)");
+    obs_sceneitem_remove(cheio);
+    obs_scene_release(cena);
+    obs_source_release(fv);
+    ipV.matar();
+  }
+
   // ---- fonte sem aparelho escolhido: fixa o primeiro iPhone que ligou, e a lista mostra esse mesmo iPhone ----
   {
     obs_source_release(fontes[0]);  // libera o UDID-1 (o primeiro da lista) para a fonte sem aparelho escolhido
@@ -316,7 +400,7 @@ int main(int argc, char** argv) {
   for (auto* f : fontes)
     if (f) obs_source_release(f);
   // o libobs destroi a fonte numa thread dele (destroy_defer): espera o destroy do modulo rodar em todas
-  checar(esperar([&] { return g_removidas == 8; }, 8000), "as 8 fontes foram destruidas");
+  checar(esperar([&] { return g_removidas == 10; }, 8000), "as 10 fontes foram destruidas (9 de antes + a do encaixar)");
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
   std::printf("    fontes liberadas e destruidas em %lld ms\n", static_cast<long long>(ms));
   checar(ms < 5000, "remover as fontes nao trava (<5 s)");

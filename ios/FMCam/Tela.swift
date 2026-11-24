@@ -23,10 +23,17 @@ final class ModeloApp: ObservableObject {
         didSet {
             ajustes.salvar()
             caixaAjustes.valor = ajustes
+            atualizarInfoRemota()
         }
     }
     @Published var estadoCamera: EstadoCaptura = .desligada
-    @Published var lentes: [OpcaoLente] = []
+    /// Tamanho real da janela (vem do layoutSubviews, que acompanha a rotação). Zero até a primeira medida.
+    @Published var tamanhoDaJanela: CGSize = .zero
+    /// Área segura da janela (a tela ignora a área segura para o vídeo ir até a borda, então ela vem daqui).
+    @Published var insetsDaJanela = EdgeInsets()
+    @Published var lentes: [OpcaoLente] = [] {
+        didSet { atualizarInfoRemota() }
+    }
     /// Modo limpo: some tudo e fica só grade, cruz e nível (o tally NO AR continua).
     @Published var limpo = false
     @Published var painel: PainelRapido?
@@ -44,8 +51,12 @@ final class ModeloApp: ObservableObject {
     @Published var ipWifi: String?
     @Published var copiado = false
     @Published var leitura = LeituraCamera()
-    @Published var limites = LimitesCamera()
+    @Published var limites = LimitesCamera() {
+        didSet { atualizarInfoRemota() }
+    }
     @Published var dimCamera: DimensoesVideo?
+    /// Posição física do aparelho (0, 90, 180, 270): o preview gira com ela, igual ao vídeo enviado.
+    @Published var anguloFisico = 0
     @Published var aviso: String?
     @Published var assinatura: TextoAssinatura?
     private let vencimento: Date?
@@ -58,7 +69,7 @@ final class ModeloApp: ObservableObject {
     private let infosLentes: [InfoLente]
     private let idVendor: String
     private let sensores = CaixaSensores()
-    private let caixaAjustes: CaixaAjustes
+    let caixaAjustes: CaixaAjustes
     private var servidor: Servidor?
     private var timer: Timer?
     private var monitor: NWPathMonitor?
@@ -82,7 +93,13 @@ final class ModeloApp: ObservableObject {
         }
         #endif
         vencimento = venc
-        let a = AjustesCamera.carregar()
+        var a = AjustesCamera.carregar()
+        if ProtecaoDeCrash().consumir() {
+            // A abertura anterior morreu aplicando ajustes na câmera: volta sem travas nem manuais, e salva assim.
+            Log.app.notice("fmcam app: a abertura anterior caiu aplicando ajustes de câmera, iniciando sem travas")
+            a = a.semTravas()
+            a.salvar()
+        }
         ajustes = a
         caixaAjustes = CaixaAjustes(a)
         caixaAjustes.assinaturaVence = venc
@@ -102,12 +119,13 @@ final class ModeloApp: ObservableObject {
         if env["FMCAM_PRINT_NOAR"] == "1" { noArForcado = true }
         if let p = env["FMCAM_PRINT_PAINEL"] { painel = PainelRapido(rawValue: p) }
         if let g = env["FMCAM_PRINT_GRUPO"] { grupo = GrupoMenu(rawValue: g) }
+        if env["FMCAM_PRINT_EM_PE"] == "1" { anguloFisico = 90 }
         // o print não pode herdar preferências de execuções anteriores
         prefs = PreferenciasTela()
         prefs.lado = env["FMCAM_PRINT_LADO"] == "direita" ? .direita : .esquerda
         ajustes = AjustesCamera()
         caixaAjustes.valor = ajustes
-        dimCamera = DimensoesVideo(largura: 1920, altura: 1080, fps: 60)
+        dimCamera = anguloFisico == 90 ? DimensoesVideo(largura: 1080, altura: 1920, fps: 60) : DimensoesVideo(largura: 1920, altura: 1080, fps: 60)
         leitura = LeituraCamera(iso: 483, obturadorSegundos: 1.0 / 60, posicaoLente: 0.4)
         if env["FMCAM_PRINT_QUALIDADE_OBS"] == "1" { info.bitrateObs = true; info.bitrate = 20_000_000 }
         presetsSuportados = Captura.presetsSuportados(lente: ajustes.lente)
@@ -120,6 +138,8 @@ final class ModeloApp: ObservableObject {
         captura.aoAviso = { [weak self] m in Task { @MainActor in self?.mostrarAviso(m) } }
         captura.aoLimites = { [weak self] l in Task { @MainActor in self?.limites = l } }
         captura.aoDimensao = { [weak self] d in Task { @MainActor in self?.dimCamera = d } }
+        anguloFisico = captura.monitorOrientacao.anguloFisico
+        captura.aoAnguloFisico = { [weak self] a in Task { @MainActor in self?.anguloFisico = a } }
         captura.aoEstado = { [weak self] e in Task { @MainActor in self?.estadoCamera = e } }
         captura.aoMutacao = { [weak self] m in
             Task { @MainActor in
@@ -129,6 +149,12 @@ final class ModeloApp: ObservableObject {
                 self.ajustes = a
             }
         }
+        atualizarInfoRemota()
+    }
+
+    /// O que o OBS vê no status: lentes, botão aceso e faixa de EV, sempre iguais ao que a tela mostra.
+    private func atualizarInfoRemota() {
+        caixaAjustes.remoto = InfoRemota.montar(lentes: lentes, ajustes: ajustes, limites: limites)
     }
 
     func iniciar() {
@@ -154,8 +180,19 @@ final class ModeloApp: ObservableObject {
         let s = Servidor(identidade: IdentidadeAparelho(modelo: identidade.modelo, nome: nome, id: identidade.id),
                          sensores: sensores, ajustes: caixaAjustes) { FonteCamera(motor: motor) }
         s.aoAtualizar = { [weak self] i in Task { @MainActor in self?.info = i } }
+        // Comando remoto do OBS: na thread principal, pelos mesmos métodos que o toque usa. A fila da main mantém a ordem.
+        s.aoComandoRemoto = { [weak self] comando, pronto in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.aplicarRemoto(comando)
+                    pronto()
+                }
+            }
+        }
+        s.aoQualidadeSemConexao = { [weak motor] p in motor?.mudarPresetSemConexao(p) }
         servidor = s
         s.iniciar()
+        Depuracao.ligar(self)
     }
 
     /// A câmera fica ligada sempre que o app está em primeiro plano, mesmo sem cliente.
@@ -178,6 +215,7 @@ final class ModeloApp: ObservableObject {
     // MARK: menu, trilhos e painéis
 
     func alternarGrupo(_ g: GrupoMenu) {
+        if painel == .nome { salvarNome() }
         if grupo == g { grupo = nil; painel = nil } else { grupo = g; painel = nil }
         Haptico.leve()
     }
@@ -190,16 +228,34 @@ final class ModeloApp: ObservableObject {
 
     /// Trava de exposição ou de foco, separadas (o toque longo na imagem continua travando as duas juntas).
     func alternarTrava(exposicao: Bool) {
+        definirTrava(exposicao: exposicao, !(exposicao ? ajustes.exposicaoTravada : ajustes.focoTravado))
+        Haptico.medio()
+    }
+
+    /// O que o botão faz e o que o OBS pede: liga ou desliga a trava e avisa na tela.
+    func definirTrava(exposicao: Bool, _ nova: Bool) {
+        // A marca "AE/AF travado" do toque longo não pode ficar na tela com a trava desligada.
+        if !nova, indicadorFoco?.travado == true { indicadorFoco = nil }
         if exposicao {
-            let nova = !ajustes.exposicaoTravada
             mudar { $0.exposicaoTravada = nova }
             mostrarAviso(nova ? "Exposição travada" : "Exposição automática")
         } else {
-            let nova = !ajustes.focoTravado
             mudar { $0.focoTravado = nova }
             mostrarAviso(nova ? "Foco travado" : "Foco automático")
         }
-        Haptico.medio()
+    }
+
+    /// Painel Balanço de branco, Auto ou Travado. Travado fixa no valor de agora (ou na temperatura já escolhida).
+    func definirTravaBranco(_ travado: Bool) {
+        mudar { $0.brancoTravado = travado; if !travado { $0.kelvin = nil } }
+    }
+
+    /// Controle de EV (só existe com a exposição em Auto), dentro da faixa que a tela e o aparelho aceitam, de 0,1 em 0,1.
+    func definirEV(_ v: Double) {
+        guard v.isFinite else { return }
+        let f = limites.faixaEV
+        let r = (min(max(v, f.lowerBound), f.upperBound) * 10).rounded() / 10
+        mudar { $0.bias = r }
     }
 
     /// O que o toque no chip de estado mostra.
@@ -220,6 +276,7 @@ final class ModeloApp: ObservableObject {
     var elementos: ElementosVisiveis { ModoLimpo.elementos(limpo: limpo, ajustes: ajustes, noAr: noArTela) }
 
     func alternarLimpo() {
+        if painel == .nome { salvarNome() }
         limpo.toggle()
         if limpo { painel = nil }
         atualizarMovimento()
@@ -260,7 +317,7 @@ final class ModeloApp: ObservableObject {
     }
 
     func receberGravidade(gx: Double, gy: Double) {
-        let a = Nivel.angulo(gx: gx, gy: gy)
+        let a = Nivel.anguloEmQualquerPosicao(gx: gx, gy: gy)
         anguloNivel = a
         let entrou = nivelamento.atualizar(angulo: a)
         nivelado = nivelamento.nivelado
@@ -292,8 +349,41 @@ final class ModeloApp: ObservableObject {
     }
 
     func selecionar(_ o: OpcaoLente) {
-        mudar(rampa: true) { $0.lente = o.lente; $0.zoom = o.zoom }
+        aplicarLente(o)
         Haptico.leve()
+    }
+
+    func aplicarLente(_ o: OpcaoLente) {
+        mudar(rampa: true) { $0.lente = o.lente; $0.zoom = o.zoom }
+    }
+
+    /// Qualidade salva no iPhone (Ajustes > Qualidade): um formato que a lente não tem cai no mais próximo abaixo.
+    /// Nada que o aparelho ofereça para esse pedido = ignora.
+    func definirQualidade(preset: Preset?, bitrate: Int?) {
+        let novo = preset.flatMap { QualidadeEnvio.efetivo($0, suportados: presetsSuportados) }
+        guard novo != nil || bitrate != nil else { return }
+        mudar { if let p = novo { $0.preset = p }; if let b = bitrate { $0.bitrate = b } }
+    }
+
+    /// Comando remoto do OBS: cada um passa pelo mesmo código do controle equivalente na tela.
+    func aplicarRemoto(_ c: ComandoRemoto) {
+        switch c {
+        case .lente(let fator):
+            guard let o = InfoRemota.opcao(fator: fator, entre: lentes) else { return }
+            aplicarLente(o)
+        case .ev(let v):
+            // Com a exposição em Manual o EV não existe na tela (e não faria nada na câmera).
+            guard ajustes.exposicaoModo == .auto else { return }
+            definirEV(v)
+        case .travaAE(let v):
+            if ajustes.exposicaoTravada != v { definirTrava(exposicao: true, v) }
+        case .travaAF(let v):
+            if ajustes.focoTravado != v { definirTrava(exposicao: false, v) }
+        case .travaBB(let v):
+            if ajustes.brancoTravado != v { definirTravaBranco(v) }
+        case .qualidade(let p, let b):
+            definirQualidade(preset: p, bitrate: b)
+        }
     }
 
     func estaSelecionada(_ o: OpcaoLente) -> Bool {
@@ -389,6 +479,10 @@ final class VistaPreview: UIView {
     var aoTocar: ((CGPoint, CGPoint, Bool) -> Void)?
     var aoToqueDuplo: (() -> Void)?
     var aoPinca: ((Double, UIGestureRecognizer.State) -> Void)?
+    /// Posição física do aparelho: o preview mostra o vídeo girado do mesmo jeito que sai para o OBS.
+    var angulo = 0 {
+        didSet { if angulo != oldValue { aplicarOrientacao() } }
+    }
     private var observadores: [NSObjectProtocol] = []
 
     override init(frame: CGRect) {
@@ -414,17 +508,12 @@ final class VistaPreview: UIView {
         observadores.append(c.addObserver(forName: .AVCaptureSessionDidStartRunning, object: nil, queue: .main) { [weak self] _ in
             self?.aplicarOrientacao()
         })
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        observadores.append(c.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.aplicarOrientacao()
-        })
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     deinit {
         observadores.forEach(NotificationCenter.default.removeObserver)
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
     override func layoutSubviews() {
@@ -437,15 +526,14 @@ final class VistaPreview: UIView {
         aplicarOrientacao()
     }
 
-    /// Preview na mesma orientação do vídeo enviado (paisagem do sensor), de pé nas duas paisagens.
+    /// Preview na mesma orientação do vídeo enviado: paisagem para os dois lados e em pé.
     func aplicarOrientacao() {
         guard let conn = camada.connection else { return }
-        let o = window?.windowScene?.interfaceOrientation ?? .landscapeRight
         if #available(iOS 17.0, *) {
-            let angulo: CGFloat = (o == .landscapeLeft) ? 180 : 0
-            if conn.isVideoRotationAngleSupported(angulo) { conn.videoRotationAngle = angulo }
+            let a = CGFloat(angulo)
+            if conn.isVideoRotationAngleSupported(a) { conn.videoRotationAngle = a }
         } else if conn.isVideoOrientationSupported {
-            conn.videoOrientation = (o == .landscapeLeft) ? .landscapeLeft : .landscapeRight
+            conn.videoOrientation = OrientacaoVideo.orientacaoDeVideo(angulo)
         }
     }
 
@@ -472,6 +560,7 @@ struct PreviewCamera: UIViewRepresentable {
     var aoTocar: (CGPoint, CGPoint, Bool) -> Void
     var aoToqueDuplo: () -> Void
     var aoPinca: (Double, UIGestureRecognizer.State) -> Void
+    var angulo: Int
 
     func makeUIView(context: Context) -> VistaPreview {
         let v = VistaPreview()
@@ -483,6 +572,7 @@ struct PreviewCamera: UIViewRepresentable {
         v.aoTocar = aoTocar
         v.aoToqueDuplo = aoToqueDuplo
         v.aoPinca = aoPinca
+        v.angulo = angulo
     }
 }
 
@@ -541,7 +631,18 @@ struct EstiloPressionar: ButtonStyle {
 }
 
 /// Botão de largura total do trilho: ícone em destaque e nome curto. Ativo é amarelo, aberto ganha contorno branco.
+private struct LarguraDoBotaoTrilho: EnvironmentKey { static let defaultValue: CGFloat? = nil }
+
+extension EnvironmentValues {
+    /// Em pé: largura igual para todos os botões do trilho. nil (paisagem) deixa o botão ocupar a coluna.
+    var larguraDoBotaoTrilho: CGFloat? {
+        get { self[LarguraDoBotaoTrilho.self] }
+        set { self[LarguraDoBotaoTrilho.self] = newValue }
+    }
+}
+
 struct BotaoTrilho: View {
+    @Environment(\.larguraDoBotaoTrilho) private var largura
     let simbolo: String
     let rotulo: String
     var ativo = false
@@ -553,10 +654,12 @@ struct BotaoTrilho: View {
         let forma = RoundedRectangle(cornerRadius: 12, style: .continuous)
         return Button(action: acao) {
             VStack(spacing: 4) {
-                Image(systemName: simbolo).font(.system(size: 19, weight: .semibold))
+                // em pé os botões ficam lado a lado: ícone com altura fixa para os textos alinharem
+                Image(systemName: simbolo).font(.system(size: 19, weight: .semibold)).frame(height: largura == nil ? nil : 24)
                 Text(rotulo).font(.system(size: 10, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
             }
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: largura == nil ? .infinity : nil, minHeight: 48)
+            .frame(width: largura, height: largura == nil ? nil : 52)
             .foregroundColor(ativo ? .black : .white)
             .background(forma.fill(ativo ? Color.destaque : Color.white.opacity(0.06)))
             .overlay(forma.stroke(Color.white, lineWidth: aberto ? 2 : 0))
@@ -749,9 +852,11 @@ struct TelaPrincipal: View {
 
     private var anim: Animation? { reduzir ? nil : .easeInOut(duration: 0.2) }
 
+    private var tamanhoDaJanela: CGSize { modelo.tamanhoDaJanela }
+
+    /// Proporção da imagem na tela: o preview gira com a posição física, então as guias e a borda do NO AR também.
     private var proporcao: CGFloat {
-        guard let d = modelo.dimCamera, d.altura > 0 else { return 16.0 / 9.0 }
-        return CGFloat(d.largura) / CGFloat(d.altura)
+        MedidasTela.proporcao(modelo.dimCamera, emPe: OrientacaoVideo.emPe(modelo.anguloFisico))
     }
 
     var body: some View {
@@ -769,16 +874,40 @@ struct TelaPrincipal: View {
                 sessao: modelo.captura.sessao,
                 aoTocar: { modelo.tocarNaImagem(camada: $0, dispositivo: $1, travar: $2) },
                 aoToqueDuplo: { withAnimation(anim) { modelo.alternarLimpo() } },
-                aoPinca: { modelo.pinca(escala: $0, fase: $1) })
+                aoPinca: { modelo.pinca(escala: $0, fase: $1) },
+                angulo: modelo.anguloFisico)
                 .ignoresSafeArea()
             GuiasView(grade: el.grade, cruz: el.cruz, nivel: el.nivel, angulo: modelo.anguloNivel,
                       nivelado: modelo.nivelado, proporcao: proporcao)
                 .ignoresSafeArea()
             indicadorDeFoco.ignoresSafeArea()
+            if let t = Rotulos.avisoCamera(modelo.estadoCamera) {
+                Text(t).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.black.opacity(0.75)))
+                    .padding(.horizontal, 32)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel(t)
+            }
             GeometryReader { g in
-                camadaDeControles(MedidasTela.areaDoVideo(tela: g.size, proporcao: proporcao), el)
+                // Depois de girar o aparelho o GeometryReader pode ficar com o tamanho antigo (a camada de controles
+                // continuava desenhada em pé numa janela deitada). O tamanho vem do layoutSubviews de uma UIView.
+                let tam = tamanhoDaJanela == .zero ? g.size : tamanhoDaJanela
+                Group {
+                    if MedidasTela.emPe(tela: tam) {
+                        controlesEmPe(tam, modelo.insetsDaJanela, el)
+                    } else {
+                        // Os controles seguem a janela, não o vídeo: ao girar, a janela vira antes.
+                        camadaDeControles(MedidasTela.areaDoVideo(tela: tam, proporcao: MedidasTela.proporcao(modelo.dimCamera, emPe: false)), el)
+                    }
+                }
+                .id("\(Int(tam.width))x\(Int(tam.height))")
             }
             .ignoresSafeArea()
+            .background(MedidorDeJanela { [modelo] t, ins in
+                if modelo.tamanhoDaJanela != t { modelo.tamanhoDaJanela = t }
+                if modelo.insetsDaJanela != ins { modelo.insetsDaJanela = ins }
+            }.ignoresSafeArea())
         }
         .animation(anim, value: el.controles)
         .animation(anim, value: modelo.painel)
@@ -838,6 +967,96 @@ struct TelaPrincipal: View {
         }
         .frame(width: area.width, height: area.height, alignment: .topLeading)
         .position(x: area.midX, y: area.midY)
+    }
+
+    // MARK: controles em pé
+    //
+    // Em pé os controles não cabem lado a lado como em paisagem, então ficam numa coluna que se empilha de cima para
+    // baixo: faixa de cima (duas linhas), o meio (menu e trilho de um lado, lentes do outro), o painel aberto e, por
+    // último, o botão de limpar no canto. Como é uma pilha, nada se sobrepõe: o que abre empurra o resto.
+
+    private func controlesEmPe(_ tela: CGSize, _ insets: EdgeInsets, _ el: ElementosVisiveis) -> some View {
+        let lado = modelo.prefs.lado
+        let borda = MedidasTela.borda
+        let dasLentes: Alignment = lado == .esquerda ? .trailing : .leading
+        let limparCanto: Alignment = lado == .esquerda ? .trailing : .leading
+        let posNoAr = PosicaoNoAr.de(noAr: modelo.noArTela, limpo: modelo.limpo)
+        let video = MedidasTela.areaDoVideo(tela: tela, proporcao: proporcao)
+        let topo = MedidasTela.topoEmPe(inseTopo: insets.top)
+
+        return ZStack(alignment: .topLeading) {
+            // Borda do NO AR atrás dos controles: em pé a faixa de cima fica sobre a borda de cima do vídeo, e a linha
+            // vermelha por cima riscava o NO AR, o estado e o nome.
+            if el.tally {
+                Rectangle().strokeBorder(Color.red, lineWidth: 5).allowsHitTesting(false)
+                    .frame(width: video.width, height: video.height).position(x: video.midX, y: video.midY)
+            }
+            VStack(spacing: 8) {
+                if el.controles {
+                    topoEmPe.frame(height: MedidasTela.topoEmPeAltura, alignment: .top)
+                    ZStack {
+                        camada(dasLentes) { lentes }
+                        camada(.bottom) { colunasEmPe }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let p = modelo.painel {
+                        PainelInferior(modelo: modelo, painel: p)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                } else {
+                    Spacer(minLength: 0)
+                }
+                camada(limparCanto) { botaoLimpar }.frame(height: 44)
+            }
+            .padding(.top, topo).padding(.bottom, max(borda, insets.bottom)).padding(.horizontal, borda)
+            .frame(width: tela.width, height: tela.height)
+
+            if posNoAr == .seloCentralizado {
+                camada(.top) {
+                    Text("NO AR").font(.system(size: 13, weight: .heavy)).foregroundColor(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 4).background(Capsule().fill(Color.red))
+                        .padding(.top, max(insets.top, 20) + 8)
+                }
+                .frame(width: tela.width, height: tela.height)
+                .allowsHitTesting(false)
+                .accessibilityLabel("No ar")
+            }
+            if let t = modelo.aviso, el.controles {
+                camada(.top) {
+                    Text(t).font(.system(size: 12.5, weight: .semibold)).foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Capsule().fill(Color.black.opacity(0.75)))
+                        .padding(.top, topo + MedidasTela.topoEmPeAltura + 6)
+                }
+                .frame(width: tela.width, height: tela.height)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+        }
+        .frame(width: tela.width, height: tela.height, alignment: .topLeading)
+    }
+
+    /// Linha 1: NO AR, estado e nome. Linha 2: formato, bateria e o resto. Se a linha 2 passar da largura, rola de lado.
+    private var topoEmPe: some View {
+        let p = modelo.prefs
+        let noArPilula = PosicaoNoAr.de(noAr: modelo.noArTela, limpo: modelo.limpo) == .pilulaNoTopo
+        let temEsquerda = noArPilula || !p.itensEsquerda.isEmpty
+        return VStack(alignment: .leading, spacing: 6) {
+            if temEsquerda {
+                ViewThatFits(in: .horizontal) {
+                    capsulaEsquerda(noAr: noArPilula, apertado: false)
+                    capsulaEsquerda(noAr: noArPilula, apertado: true)
+                }
+            }
+            if !p.itensDireita.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    capsulaDireita(apertado: false).fixedSize()
+                    capsulaDireita(apertado: true).fixedSize()
+                    ScrollView(.horizontal, showsIndicators: false) { capsulaDireita(apertado: true).fixedSize() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: indicador de foco
@@ -989,6 +1208,32 @@ struct TelaPrincipal: View {
         }
     }
 
+    /// Em pé: menu em linha no pé da tela e, aberto um grupo, o trilho em linha logo acima. Não cobre a imagem.
+    private var colunasEmPe: some View {
+        VStack(spacing: 6) {
+            if modelo.grupo != nil {
+                GeometryReader { g in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: MedidasTela.espacoTrilhoEmPe) { botoesDoTrilho }
+                            .environment(\.larguraDoBotaoTrilho, MedidasTela.larguraItemEmPe(disponivel: g.size.width - 12, itens: itensDoTrilho))
+                            .padding(.horizontal, 6)
+                            .frame(minWidth: g.size.width, minHeight: g.size.height)
+                    }
+                }
+                .frame(height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: MedidasTela.raio, style: .continuous))
+                .vidro()
+            }
+            HStack(spacing: 6) {
+                ForEach(GrupoMenu.allCases, id: \.self) { g in
+                    ItemDoMenu(grupo: g, selecionado: modelo.grupo == g) { modelo.alternarGrupo(g) }
+                }
+            }
+            .padding(.horizontal, 6).padding(.vertical, 6)
+            .vidro()
+        }
+    }
+
     private var menu: some View {
         let itens = VStack(spacing: 6) {
             ForEach(GrupoMenu.allCases, id: \.self) { g in
@@ -1017,6 +1262,16 @@ struct TelaPrincipal: View {
         .frame(width: MedidasTela.larguraTrilho)
         .frame(maxHeight: .infinity, alignment: .top)
         .vidro()
+    }
+
+    /// Quantos botões `botoesDoTrilho` mostra no grupo aberto.
+    private var itensDoTrilho: Int {
+        switch modelo.grupo {
+        case .camera, .ajustes: return 6
+        case .guias: return 3
+        case .info: return ItemTopo.allCases.count
+        case nil: return 0
+        }
     }
 
     @ViewBuilder private var botoesDoTrilho: some View {
@@ -1161,8 +1416,8 @@ struct PainelInferior: View {
                     }
                 }
                 if a.exposicaoModo == .auto {
-                    Regua(rotulo: "EV", valor: Binding(get: { modelo.ajustes.bias }, set: { v in modelo.mudar { $0.bias = v } }),
-                          faixa: -2...2, passo: 0.1, texto: String(format: "%+.1f EV", a.bias))
+                    Regua(rotulo: "EV", valor: Binding(get: { modelo.ajustes.bias }, set: { v in modelo.definirEV(v) }),
+                          faixa: modelo.limites.faixaEV, passo: 0.1, texto: String(format: "%+.1f EV", a.bias))
                 } else {
                     Regua(rotulo: "ISO", valor: Binding(get: { modelo.ajustes.iso }, set: { v in modelo.mudar { $0.iso = v } }),
                           faixa: modelo.limites.isoMin...max(modelo.limites.isoMax, modelo.limites.isoMin + 1), texto: "\(Int(a.iso))")
@@ -1180,11 +1435,11 @@ struct PainelInferior: View {
         let a = modelo.ajustes
         return HStack(spacing: 12) {
             Segmento(opcoes: ["Auto", "Travado"], atual: a.brancoTravado ? "Travado" : "Auto") { v in
-                modelo.mudar { $0.brancoTravado = v == "Travado"; if v != "Travado" { $0.kelvin = nil } }
+                modelo.definirTravaBranco(v == "Travado")
             }
             if a.brancoTravado {
                 Regua(rotulo: "Temperatura", valor: Binding(get: { modelo.ajustes.kelvin ?? 5500 }, set: { v in modelo.mudar { $0.kelvin = v } }),
-                      faixa: 2500...8000, passo: 100, texto: "\(Int(a.kelvin ?? 5500)) K")
+                      faixa: 2500...8000, passo: 100, texto: Rotulos.temperatura(a))
             } else {
                 nota("O iPhone ajusta o branco sozinho.")
             }
@@ -1206,7 +1461,8 @@ struct PainelInferior: View {
         let formatoTrav = modelo.formatoTravado
         let bitrateTrav = modelo.bitrateTravado
         // Travado: mostra o que está saindo de verdade (veio do OBS). Livre: o que está salvo no iPhone.
-        let preset = formatoTrav ? QualidadeEnvio.preset(de: modelo.dimCamera) : modelo.ajustes.preset
+        let preset = formatoTrav ? QualidadeEnvio.preset(de: modelo.dimCamera)
+            : QualidadeEnvio.exibido(salvo: modelo.ajustes.preset, suportados: modelo.presetsSuportados)
         let bitrate = bitrateTrav ? modelo.info.bitrate : modelo.ajustes.bitrate
         let sup = modelo.presetsSuportados
         let resolucoes = Resolucao.allCases.map(\.rawValue)
@@ -1223,13 +1479,13 @@ struct PainelInferior: View {
         return VStack(alignment: .leading, spacing: 6) {
             linhaDeQualidade("Resolução") {
                 Segmento(opcoes: resolucoes, atual: resAtual?.rawValue ?? "", desabilitados: semResolucao, compacto: true) { v in
-                    guard let r = Resolucao(rawValue: v), let novo = QualidadeEnvio.trocar(resolucao: r, fpsAtual: modelo.ajustes.preset.fps, suportados: sup) else { return }
+                    guard let r = Resolucao(rawValue: v), let novo = QualidadeEnvio.trocar(resolucao: r, fpsAtual: (preset ?? modelo.ajustes.preset).fps, suportados: sup) else { return }
                     modelo.mudar { $0.preset = novo }
                 }
             }
             linhaDeQualidade("Quadros") {
                 Segmento(opcoes: quadros, atual: preset.map { String($0.fps) } ?? "", desabilitados: semQuadros, compacto: true) { v in
-                    guard let f = Int(v), let novo = QualidadeEnvio.preset(resolucao: Resolucao.de(modelo.ajustes.preset), fps: f) else { return }
+                    guard let f = Int(v), let novo = QualidadeEnvio.preset(resolucao: Resolucao.de(preset ?? modelo.ajustes.preset), fps: f) else { return }
                     modelo.mudar { $0.preset = novo }
                 }
             }
@@ -1288,4 +1544,31 @@ struct PainelInferior: View {
             nota("Lado do menu e do trilho. As lentes vão para o outro lado.")
         }
     }
+}
+
+
+/// Entrega o tamanho real da janela a cada layout (rotação inclusive).
+struct MedidorDeJanela: UIViewRepresentable {
+    var aoMedir: (CGSize, EdgeInsets) -> Void
+
+    final class Vista: UIView {
+        var aoMedir: ((CGSize, EdgeInsets) -> Void)?
+        private var ultimo: CGSize = .zero
+        private var ultimoIns = EdgeInsets()
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let i = window?.safeAreaInsets ?? .zero
+            let ins = EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right)
+            guard bounds.width > 0, bounds.size != ultimo || ins != ultimoIns else { return }
+            ultimo = bounds.size
+            ultimoIns = ins
+            let t = bounds.size
+            DispatchQueue.main.async { [weak self] in self?.aoMedir?(t, ins) }
+        }
+    }
+
+    func makeUIView(context: Context) -> Vista {
+        let v = Vista(); v.isUserInteractionEnabled = false; v.aoMedir = aoMedir; return v
+    }
+    func updateUIView(_ v: Vista, context: Context) { v.aoMedir = aoMedir }
 }

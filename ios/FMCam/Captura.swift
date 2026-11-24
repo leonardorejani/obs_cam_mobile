@@ -44,6 +44,8 @@ enum EventoVideo {
     /// SPS e PPS em Annex B, com o tempo do quadro que vem a seguir.
     case config(tempo: UInt64, dados: Data)
     case quadro(tempo: UInt64, chave: Bool, dados: Data)
+    /// O tamanho do vídeo mudou no meio da conexão (o aparelho girou entre paisagem e em pé). Vem antes do tipo 1 novo.
+    case dimensao(DimensoesVideo)
     /// Falha depois de iniciado (câmera tomada por outro app, por exemplo).
     case erro(String)
 }
@@ -80,6 +82,19 @@ enum ControleDePartida {
     /// Partida cancelada (o cliente saiu enquanto a autorização ou a configuração andava) só segue se o app
     /// está em primeiro plano, quando a câmera fica ligada de qualquer jeito para o preview.
     static func deveProsseguir(emPrimeiroPlano: Bool, cancelada: Bool) -> Bool { emPrimeiroPlano || !cancelada }
+
+    /// O app chama "primeiro plano" duas vezes ao abrir (onAppear e a fase active, ~0,7 s de diferença no aparelho). A segunda
+    /// não pode mexer na sessão que já está de pé nem na que um cliente acabou de pedir.
+    static func deveLigarPreview(jaEmPrimeiroPlano: Bool, sessaoRodando: Bool, configurada: Bool) -> Bool {
+        !(jaEmPrimeiroPlano && sessaoRodando && configurada)
+    }
+}
+
+/// Reconfigurar a sessão para outro formato da MESMA câmera: só muda o formato ativo, sem tirar e pôr a entrada e a saída.
+enum ReusoDaSessao {
+    static func mantemEntrada(mesmoDispositivo: Bool, entradas: Int, saidaAtualNaSessao: Bool) -> Bool {
+        mesmoDispositivo && entradas == 1 && saidaAtualNaSessao
+    }
 }
 
 // MARK: - Auxiliares de câmera
@@ -163,8 +178,26 @@ enum Captura {
     }
 }
 
+/// Erro de execução da câmera: uma religada por janela de `intervalo`, não uma por vida do app. Uma segunda falha logo em
+/// seguida não entra em laço, mas um erro horas depois de a câmera ter voltado a rodar ganha outra tentativa.
+struct PoliticaDeReinicio: Equatable {
+    static let intervalo: TimeInterval = 30
+    private var ultima: Date?
+
+    mutating func podeTentar(agora: Date) -> Bool {
+        if let u = ultima, agora.timeIntervalSince(u) < Self.intervalo { return false }
+        ultima = agora
+        return true
+    }
+
+    /// A sessão foi ligada de novo pelo caminho normal: o erro seguinte volta a ter direito a uma tentativa.
+    mutating func zerar() { ultima = nil }
+}
+
 enum EstadoCaptura: Equatable {
     case desligada, ligando, ligada, semCamera, semPermissao
+    /// O iOS pausou a câmera com o app na frente (ligação, outro app usando a câmera, temperatura).
+    case interrompida
     case erro(String)
 }
 
@@ -211,6 +244,11 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     /// Aviso curto para a tela (ex.: estabilização indisponível).
     var aoAviso: ((String) -> Void)?
 
+    /// Posição física do aparelho: o vídeo enviado e o preview giram com ela.
+    let monitorOrientacao = MonitorOrientacao(fila: Captura.filaSessao)
+    /// Posição física agora (sem debounce), para o preview e as guias. Chamado na fila da câmera.
+    var aoAnguloFisico: ((Int) -> Void)?
+
     private var filaSessao: DispatchQueue { Captura.filaSessao }
     private let filaAmostras = DispatchQueue(label: "fmcam.captura.amostras", qos: .userInteractive)
     private let trava = NSLock()
@@ -220,9 +258,12 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
 
     // Só na fila da câmera:
     private var ajustes = AjustesCamera()
-    private var preset = Preset.p1080_30
+    private(set) var preset = Preset.p1080_30
     private var configurado: (preset: Preset, lente: Lente)?
+    /// Tamanho do vídeo enviado, já no ângulo em uso (1080x1920 com o aparelho em pé).
     private var dimAtual: DimensoesVideo?
+    /// Ângulo de rotação que está na conexão de saída agora.
+    private var anguloConexao = 0
     private var dispositivoAtual: AVCaptureDevice?
     private var saidaAtual: AVCaptureVideoDataOutput?
     /// Usando o dispositivo virtual: a lente muda por rampa de zoom, sem reconfigurar a sessão.
@@ -232,7 +273,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     /// Ponto em que o usuário tocou para focar (nil = foco no centro, nada a devolver).
     private var pontoTocado: CGPoint?
     private var ultimaDevolucao: Date?
-    private var tentouReiniciar = false
+    var reinicio = PoliticaDeReinicio()
     private var emPrimeiroPlano = false
     private var timerLeitura: DispatchSourceTimer?
 
@@ -243,13 +284,20 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         t.setEventHandler { [weak self] in self?.lerCamera() }
         t.resume()
         timerLeitura = t
+        monitorOrientacao.aoFisico = { [weak self] a in self?.aoAnguloFisico?(a) }
+        monitorOrientacao.aoAplicar = { [weak self] a in self?.aplicarRotacao(a) }
+        monitorOrientacao.iniciar()
         let c = NotificationCenter.default
-        observadores.append(c.addObserver(forName: .AVCaptureSessionWasInterrupted, object: sessao, queue: nil) { n in
+        observadores.append(c.addObserver(forName: .AVCaptureSessionWasInterrupted, object: sessao, queue: nil) { [weak self] n in
             let r = (n.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)?.intValue ?? -1
             Log.captura.notice("fmcam captura: sessão da câmera interrompida, motivo \(r, privacy: .public)")
+            // Em segundo plano a câmera para de propósito. Os outros motivos acontecem com o app na frente e a tela mostra.
+            guard r != AVCaptureSession.InterruptionReason.videoDeviceNotAvailableInBackground.rawValue else { return }
+            self?.filaSessao.async { if self?.emPrimeiroPlano == true { self?.aoEstado?(.interrompida) } }
         })
-        observadores.append(c.addObserver(forName: .AVCaptureSessionInterruptionEnded, object: sessao, queue: nil) { _ in
+        observadores.append(c.addObserver(forName: .AVCaptureSessionInterruptionEnded, object: sessao, queue: nil) { [weak self] _ in
             Log.captura.notice("fmcam captura: interrupção da câmera terminou")
+            self?.filaSessao.async { if self?.emPrimeiroPlano == true, self?.sessao.isRunning == true { self?.aoEstado?(.ligada) } }
         })
         observadores.append(c.addObserver(forName: .AVCaptureDeviceSubjectAreaDidChange, object: nil, queue: nil) { [weak self] n in
             self?.filaSessao.async { self?.cenaMudou(n.object as? AVCaptureDevice) }
@@ -266,11 +314,18 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
 
     // MARK: ciclo de vida (primeiro plano)
 
-    func definirAjustesIniciais(_ a: AjustesCamera) { filaSessao.async { self.ajustes = a } }
+    /// A câmera abre no formato salvo no iPhone (senão a 1a conexão em 4K reconfigurava a sessão dentro do limite de partida).
+    func definirAjustesIniciais(_ a: AjustesCamera) { filaSessao.async { self.ajustes = a; self.preset = a.preset } }
 
     func ligarEmPrimeiroPlano() {
         filaSessao.async {
+            let repetido = !ControleDePartida.deveLigarPreview(jaEmPrimeiroPlano: self.emPrimeiroPlano, sessaoRodando: self.sessao.isRunning,
+                                                               configurada: self.dimAtual != nil)
             self.emPrimeiroPlano = true
+            if repetido {
+                Log.captura.notice("fmcam captura: primeiro plano repetido, a câmera já está ligada")
+                return
+            }
             Log.captura.notice("fmcam captura: primeiro plano, ligando a câmera")
             self.garantir(preset: self.preset, completion: nil)
         }
@@ -289,7 +344,12 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
 
     func prepararParaTransmitir(_ config: ConfigVideo, cancelada: @escaping () -> Bool,
                                 completion: @escaping (Result<DimensoesVideo, ErroFonte>) -> Void) {
+        let pedidoEm = Date()
         filaSessao.async {
+            // Diagnóstico da partida: o relógio do limite de 2,5 s corre desde o handshake, inclusive enquanto esta fila
+            // estava presa em outra coisa (startRunning do preview, por exemplo).
+            let espera = Int(Date().timeIntervalSince(pedidoEm) * 1000)
+            Log.captura.notice("fmcam captura: partida pedida esperou \(espera, privacy: .public) ms na fila da câmera, sessão rodando=\(self.sessao.isRunning, privacy: .public), formato atual \(self.preset.rawValue, privacy: .public), pedido \(config.preset.rawValue, privacy: .public)")
             self.preset = config.preset
             // Na conexão o pedido de lente do OBS vale.
             let pedido: AjustesCamera.Mutacao = { $0 = $0.aplicando(config: config) }
@@ -314,6 +374,17 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             Log.captura.notice("fmcam captura: trocando o formato de \(self.preset.rawValue, privacy: .public) para \(novo.rawValue, privacy: .public)")
             self.preset = novo
             self.garantir(preset: novo, completion: completion)
+        }
+    }
+
+    /// Qualidade trocada no iPhone sem conexão: o preview passa para o formato salvo. Com cliente (a sessão cuida da troca)
+    /// ou em segundo plano (câmera parada), nada muda aqui.
+    func mudarPresetSemConexao(_ novo: Preset) {
+        filaSessao.async {
+            guard self.emPrimeiroPlano, self.consumidorAtual() == nil, novo != self.preset || self.dimAtual == nil else { return }
+            Log.captura.notice("fmcam captura: qualidade salva mudou sem conexão, preview de \(self.preset.rawValue, privacy: .public) para \(novo.rawValue, privacy: .public)")
+            self.preset = novo
+            self.garantir(preset: novo, completion: nil)
         }
     }
 
@@ -346,7 +417,14 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
                 self.aplicarAjustes(antes: ant)
                 return
             }
-            if novo.lente != antigo.lente, self.mapaVirtual == nil {
+            if ControleManual.precisa(novo) != ControleManual.precisa(antigo), Captura.dispositivoVirtual() != nil {
+                // Foco manual ou branco em K ligou ou desligou: o virtual não tem esses recursos, então troca de câmera
+                // (física para o manual, virtual de volta quando sai). Mesmo caminho da troca de lente: tipo 1 e chave.
+                Log.captura.notice("fmcam captura: controle manual mudou (foco manual=\(novo.focoModo == .manual, privacy: .public), branco em K=\(novo.brancoTravado && novo.kelvin != nil, privacy: .public)), reavaliando a câmera")
+                self.garantir(preset: self.preset) { r in
+                    if case .success(let dim) = r { self.consumidorAtual()?.aoReconfigurar(dim) }
+                }
+            } else if novo.lente != antigo.lente, self.mapaVirtual == nil {
                 Log.captura.notice("fmcam captura: trocando de lente \(antigo.lente.rawValue, privacy: .public) para \(novo.lente.rawValue, privacy: .public)")
                 self.garantir(preset: self.preset) { r in
                     if case .success(let dim) = r { self.consumidorAtual()?.aoReconfigurar(dim) }
@@ -365,6 +443,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     func focar(ponto: CGPoint, travar: Bool) {
         filaSessao.async {
             guard let d = self.dispositivoAtual else { return }
+            let ponto = LimitesDeCamera.ponto(ponto)
             // Em foco ou exposição manual o toque não tem o que fazer: o dono já escolheu o valor.
             let a = self.ajustes
             do { try d.lockForConfiguration() } catch { return }
@@ -423,8 +502,13 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             estabiliza = f.isVideoStabilizationModeSupported(.standard)
             if #available(iOS 17.0, *), f.isVideoStabilizationModeSupported(.previewOptimized) { estabiliza = true }
         }
+        let serve = virtual.map {
+            ControleManual.dispositivoServe(focoManual: ajustes.focoModo == .manual, brancoEmK: ajustes.brancoTravado && ajustes.kelvin != nil,
+                                            suportaLenteCustom: $0.isLockingFocusWithCustomLensPositionSupported,
+                                            suportaGanhosCustom: $0.isLockingWhiteBalanceWithCustomDeviceGainsSupported)
+        } ?? true
         let modo = ModoCamera.escolher(virtualExiste: virtual != nil, virtualTemFormato: formato != nil,
-                                       estabilizar: ajustes.estabilizar, virtualEstabiliza: estabiliza)
+                                       estabilizar: ajustes.estabilizar, virtualEstabiliza: estabiliza, virtualServeAoManual: serve)
         if case .virtual = modo, let v = virtual { return v }
         if case .fisica(let motivo) = modo, virtual != nil {
             Log.captura.notice("fmcam captura: dispositivo virtual não serve para \(preset.rawValue, privacy: .public) (\(motivo, privacy: .public)), usando a câmera física da lente")
@@ -469,7 +553,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             aplicarAjustes()
             publicarLimites(dispositivo, dim)
             if !sessao.isRunning {
-                tentouReiniciar = false
+                reinicio.zerar()
                 let t0 = Date()
                 sessao.startRunning()
                 let ms = Int(Date().timeIntervalSince(t0) * 1000)
@@ -504,25 +588,35 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         guard let (formato, dim) = escolhido else {
             throw ErroFonte.camera("A câmera não oferece o formato pedido.")
         }
-        let entrada: AVCaptureDeviceInput
-        do { entrada = try AVCaptureDeviceInput(device: dispositivo) }
-        catch { throw ErroFonte.camera("Não foi possível abrir a câmera.") }
+        let saida: AVCaptureVideoDataOutput
+        let entradaAtual = sessao.inputs.compactMap { $0 as? AVCaptureDeviceInput }.first
+        if ReusoDaSessao.mantemEntrada(mesmoDispositivo: entradaAtual?.device === dispositivo, entradas: sessao.inputs.count,
+                                       saidaAtualNaSessao: saidaAtual.map { sessao.outputs.contains($0) } ?? false),
+           let s = saidaAtual {
+            // Mesma câmera, só outro formato (troca de qualidade): tirar e pôr a entrada de volta reiniciava as câmeras do
+            // dispositivo virtual e o vídeo parava 1 a 1,6 s (medido no 15 Pro Max, encostando no watchdog de 1,5 s).
+            saida = s
+        } else {
+            let entrada: AVCaptureDeviceInput
+            do { entrada = try AVCaptureDeviceInput(device: dispositivo) }
+            catch { throw ErroFonte.camera("Não foi possível abrir a câmera.") }
 
-        let saida = AVCaptureVideoDataOutput()
-        saida.alwaysDiscardsLateVideoFrames = true
-        saida.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
-        saida.setSampleBufferDelegate(self, queue: filaAmostras)
+            saida = AVCaptureVideoDataOutput()
+            saida.alwaysDiscardsLateVideoFrames = true
+            saida.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
+            saida.setSampleBufferDelegate(self, queue: filaAmostras)
 
-        sessao.beginConfiguration()
-        sessao.inputs.forEach { sessao.removeInput($0) }
-        sessao.outputs.forEach { sessao.removeOutput($0) }
-        guard sessao.canAddInput(entrada), sessao.canAddOutput(saida) else {
+            sessao.beginConfiguration()
+            sessao.inputs.forEach { sessao.removeInput($0) }
+            sessao.outputs.forEach { sessao.removeOutput($0) }
+            guard sessao.canAddInput(entrada), sessao.canAddOutput(saida) else {
+                sessao.commitConfiguration()
+                throw ErroFonte.camera("A câmera não pôde ser ligada.")
+            }
+            sessao.addInput(entrada)
+            sessao.addOutput(saida)
             sessao.commitConfiguration()
-            throw ErroFonte.camera("A câmera não pôde ser ligada.")
         }
-        sessao.addInput(entrada)
-        sessao.addOutput(saida)
-        sessao.commitConfiguration()
 
         do {
             try dispositivo.lockForConfiguration()
@@ -534,23 +628,50 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         } catch {
             throw ErroFonte.camera("Não foi possível ajustar a câmera.")
         }
-        // O vídeo enviado sai sempre na posição nativa do sensor (paisagem, 1920x1080 e nunca 1080x1920).
-        if let conn = saida.connection(with: .video) {
-            if #available(iOS 17.0, *) {
-                if conn.isVideoRotationAngleSupported(0) { conn.videoRotationAngle = 0 }
-            } else if conn.isVideoOrientationSupported {
-                conn.videoOrientation = .landscapeRight
-            }
-        }
+        // O vídeo enviado segue a posição física do aparelho: paisagem (0 ou 180) ou em pé (90 ou 270).
+        let angulo = monitorOrientacao.anguloAplicado
+        var anguloUsado = 0
+        if let conn = saida.connection(with: .video), Self.definirAngulo(conn, angulo) { anguloUsado = angulo }
+        anguloConexao = anguloUsado
+        monitorOrientacao.usar(dispositivo: dispositivo)
+        let dimEnviada = OrientacaoVideo.dimensoes(dim, angulo: anguloUsado)
         saidaAtual = saida
         dispositivoAtual = dispositivo
         configurado = (preset, lente)
-        dimAtual = dim
+        dimAtual = dimEnviada
         pontoTocado = nil
         trava.lock(); logPrimeiroQuadro = true; trava.unlock()
         aplicarEstabilizacao()
-        Log.captura.notice("fmcam captura: configurada, lente \(lente.rawValue, privacy: .public), \(dim.largura, privacy: .public)x\(dim.altura, privacy: .public) a \(dim.fps, privacy: .public) fps")
-        return dim
+        Log.captura.notice("fmcam captura: configurada, lente \(lente.rawValue, privacy: .public), \(dimEnviada.largura, privacy: .public)x\(dimEnviada.altura, privacy: .public) a \(dimEnviada.fps, privacy: .public) fps, rotação \(anguloUsado, privacy: .public) graus")
+        return dimEnviada
+    }
+
+    /// Põe o ângulo na conexão (RotationCoordinator no iOS 17, videoOrientation antes). false se a conexão não aceita.
+    private static func definirAngulo(_ conn: AVCaptureConnection, _ a: Int) -> Bool {
+        if #available(iOS 17.0, *) {
+            guard conn.isVideoRotationAngleSupported(CGFloat(a)) else { return false }
+            conn.videoRotationAngle = CGFloat(a)
+            return true
+        }
+        guard conn.isVideoOrientationSupported else { return false }
+        conn.videoOrientation = OrientacaoVideo.orientacaoDeVideo(a)
+        return true
+    }
+
+    /// O aparelho girou (já passou pelo debounce): gira a saída e avisa o codificador do tamanho novo, que manda tipo 1 e
+    /// quadro-chave. Sem sessão configurada não há o que girar: a próxima configuração já nasce no ângulo certo.
+    private func aplicarRotacao(_ a: Int) {
+        guard a != anguloConexao, let conn = saidaAtual?.connection(with: .video), let atual = dimAtual else { return }
+        guard Self.definirAngulo(conn, a) else {
+            Log.captura.notice("fmcam captura: a conexão não aceita a rotação de \(a, privacy: .public) graus")
+            return
+        }
+        let nova = OrientacaoVideo.reorientar(atual, de: anguloConexao, para: a)
+        Log.captura.notice("fmcam captura: rotação de \(self.anguloConexao, privacy: .public) para \(a, privacy: .public) graus, \(nova.largura, privacy: .public)x\(nova.altura, privacy: .public)")
+        anguloConexao = a
+        dimAtual = nova
+        aoDimensao?(nova)
+        consumidorAtual()?.aoReconfigurar(nova)
     }
 
     /// Padrão desligado: a estabilização segura quadros e soma atraso. Ligada, usa o modo de menor atraso que o formato
@@ -590,7 +711,15 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             Log.captura.notice("fmcam captura: não consegui travar a câmera para ajustar")
             return
         }
-        defer { d.unlockForConfiguration() }
+        // Se o app morrer aqui dentro, a marca sobra e a próxima abertura volta sem travas (ver ProtecaoDeCrash).
+        let protecao = ProtecaoDeCrash()
+        protecao.marcar()
+        defer {
+            d.unlockForConfiguration()
+            protecao.limpar()
+            // o que o dispositivo ficou fazendo de verdade (os setters são assíncronos): vai para o log do aparelho
+            filaSessao.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.registrarEstadoEfetivo() }
+        }
         let a = ajustes
         func mudou(_ f: (AjustesCamera) -> [AnyHashable]) -> Bool {
             guard let antes else { return true }
@@ -601,36 +730,38 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
             if let alvo = fatorVirtual(a, d) {
                 // Pinça ou partida: vai direto (a rampa é só para o toque nos botões de lente).
                 d.cancelVideoZoomRamp()
-                d.videoZoomFactor = CGFloat(alvo)
+                d.videoZoomFactor = CGFloat(zoomSeguro(alvo, d))
             } else if mapaVirtual == nil {
                 let maxZoom = min(Double(d.activeFormat.videoMaxZoomFactor), AjustesCamera.faixaZoom.upperBound)
-                d.videoZoomFactor = CGFloat(min(max(a.zoom, 1), maxZoom))
+                d.videoZoomFactor = CGFloat(zoomSeguro(min(max(a.zoom, 1), maxZoom), d))
             }
         }
 
         if mudou({ [$0.exposicaoModo, $0.exposicaoTravada, $0.bias, $0.iso, $0.obturador] }) {
-            if a.exposicaoModo == .manual {
+            if a.exposicaoModo == .manual, d.isExposureModeSupported(.custom) {
                 let f = d.activeFormat
-                let iso = min(max(Float(a.iso), f.minISO), f.maxISO)
-                var dur = CMTime(seconds: a.obturador, preferredTimescale: 1_000_000_000)
-                dur = CMTimeMaximum(dur, f.minExposureDuration)
-                dur = CMTimeMinimum(dur, CMTimeMinimum(f.maxExposureDuration, d.activeVideoMinFrameDuration))
+                let iso = LimitesDeCamera.limitarF(Float(a.iso), f.minISO, f.maxISO, padrao: d.iso)
+                let seg = LimitesDeCamera.obturador(a.obturador, min: f.minExposureDuration.seconds, max: f.maxExposureDuration.seconds,
+                                                    duracaoQuadro: d.activeVideoMinFrameDuration.seconds, padrao: d.exposureDuration.seconds)
+                let dur = CMTime(seconds: seg, preferredTimescale: 1_000_000_000)
                 d.setExposureModeCustom(duration: dur, iso: iso, completionHandler: nil)
-            } else {
-                let bias = min(max(Float(a.bias), d.minExposureTargetBias), d.maxExposureTargetBias)
+            } else if a.exposicaoModo != .manual {
+                let bias = LimitesDeCamera.limitarF(Float(a.bias), d.minExposureTargetBias, d.maxExposureTargetBias, padrao: 0)
                 d.setExposureTargetBias(bias, completionHandler: nil)
                 if a.exposicaoTravada {
                     if d.exposureMode != .locked, d.isExposureModeSupported(.locked) { d.exposureMode = .locked }
                 } else if d.exposureMode != .continuousAutoExposure, d.isExposureModeSupported(.continuousAutoExposure) {
                     d.exposureMode = .continuousAutoExposure
                 }
+            } else {
+                Log.captura.notice("fmcam captura: exposição manual indisponível neste dispositivo, ignorada")
             }
         }
 
         if mudou({ [$0.focoModo, $0.focoTravado, $0.posicaoLente] }) {
             if a.focoModo == .manual {
                 if d.isLockingFocusWithCustomLensPositionSupported {
-                    d.setFocusModeLocked(lensPosition: Float(min(max(a.posicaoLente, 0), 1)), completionHandler: nil)
+                    d.setFocusModeLocked(lensPosition: LimitesDeCamera.limitarF(Float(a.posicaoLente), 0, 1, padrao: 0.5), completionHandler: nil)
                 }
             } else if a.focoTravado {
                 if d.focusMode != .locked, d.isFocusModeSupported(.locked) { d.focusMode = .locked }
@@ -644,17 +775,46 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
 
         if mudou({ [$0.brancoTravado, $0.kelvin ?? -1] }) {
             if a.brancoTravado {
-                if d.isWhiteBalanceModeSupported(.locked), d.whiteBalanceMode != .locked || a.kelvin != nil {
-                    var g = d.deviceWhiteBalanceGains
-                    if let k = a.kelvin {
-                        g = d.deviceWhiteBalanceGains(for: .init(temperature: Float(k), tint: 0))
-                    }
-                    d.setWhiteBalanceModeLocked(with: Self.normalizar(g, max: d.maxWhiteBalanceGain), completionHandler: nil)
-                }
+                if d.whiteBalanceMode != .locked || a.kelvin != nil { travarBranco(d, kelvin: a.kelvin) }
             } else if d.whiteBalanceMode == .locked, d.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 d.whiteBalanceMode = .continuousAutoWhiteBalance
             }
         }
+    }
+
+    /// Modos efetivos do dispositivo, para conferir no log se o que foi pedido pegou.
+    func registrarEstadoEfetivo() {
+        guard let d = dispositivoAtual else { return }
+        let conn = saidaAtual?.connection(with: .video)
+        let f = CMVideoFormatDescriptionGetDimensions(d.activeFormat.formatDescription)
+        Log.captura.notice("fmcam estado: balanço=\(d.whiteBalanceMode.rawValue, privacy: .public) exposição=\(d.exposureMode.rawValue, privacy: .public) foco=\(d.focusMode.rawValue, privacy: .public) lente=\(d.lensPosition, format: .fixed(precision: 2), privacy: .public) bias=\(d.exposureTargetBias, format: .fixed(precision: 2), privacy: .public) iso=\(Int(d.iso), privacy: .public) obt=\(d.exposureDuration.seconds, format: .fixed(precision: 5), privacy: .public) zoom=\(d.videoZoomFactor, format: .fixed(precision: 2), privacy: .public) estab(ativa=\(conn?.activeVideoStabilizationMode.rawValue ?? -9, privacy: .public) pref=\(conn?.preferredVideoStabilizationMode.rawValue ?? -9, privacy: .public)) formato=\(f.width, privacy: .public)x\(f.height, privacy: .public) ajustes(wb=\(self.ajustes.brancoTravado, privacy: .public) ae=\(self.ajustes.exposicaoTravada, privacy: .public) af=\(self.ajustes.focoTravado, privacy: .public) mf=\(self.ajustes.focoModo.rawValue, privacy: .public) estab=\(self.ajustes.estabilizar, privacy: .public)) gravandoBranco=\(d.isLockingWhiteBalanceWithCustomDeviceGainsSupported, privacy: .public) maxGanho=\(d.maxWhiteBalanceGain, format: .fixed(precision: 2), privacy: .public)")
+    }
+
+    /// Trava o branco só pelo que o dispositivo de agora suporta, com ganhos limitados a 1...maxWhiteBalanceGain dele.
+    /// Os ganhos custom exigem `isLockingWhiteBalanceWithCustomDeviceGainsSupported` (o dispositivo virtual pode não ter) e
+    /// um máximo válido (zero antes da sessão rodar). Sem eles, `whiteBalanceMode = .locked`, e sem isso só log.
+    private func travarBranco(_ d: AVCaptureDevice, kelvin: Double?) {
+        var ganhos: LimitesDeCamera.Ganhos?
+        if d.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
+            var g = d.deviceWhiteBalanceGains
+            if let k = kelvin {
+                g = d.deviceWhiteBalanceGains(for: .init(temperature: LimitesDeCamera.kelvinSeguro(k), tint: 0))
+            }
+            ganhos = LimitesDeCamera.ganhosSeguros(r: g.redGain, g: g.greenGain, b: g.blueGain, max: d.maxWhiteBalanceGain)
+        }
+        switch PlanoBranco.decidir(suportaGanhos: d.isLockingWhiteBalanceWithCustomDeviceGainsSupported,
+                                   suportaTravado: d.isWhiteBalanceModeSupported(.locked), ganhos: ganhos) {
+        case .ganhos(let g):
+            d.setWhiteBalanceModeLocked(with: .init(redGain: g.r, greenGain: g.g, blueGain: g.b), completionHandler: nil)
+        case .modoTravado:
+            if d.whiteBalanceMode != .locked { d.whiteBalanceMode = .locked }
+        case .ignorar(let motivo):
+            Log.captura.notice("fmcam captura: trava de branco ignorada, \(motivo, privacy: .public)")
+        }
+    }
+
+    private func zoomSeguro(_ z: Double, _ d: AVCaptureDevice) -> Double {
+        LimitesDeCamera.zoom(z, min: Double(d.minAvailableVideoZoomFactor), max: Double(d.maxAvailableVideoZoomFactor))
     }
 
     /// Troca de câmera física do virtual: comportamento .auto sem condições restritivas e todas as câmeras mais curtas permitidas
@@ -688,7 +848,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     private func fatorVirtual(_ a: AjustesCamera, _ d: AVCaptureDevice) -> Double? {
         guard let mapa = mapaVirtual, let f = mapa.fator(lente: a.lente, zoom: a.zoom) else { return nil }
         let teto = min(Double(d.maxAvailableVideoZoomFactor), (mapa.fatorBase(a.lente) ?? 1) * AjustesCamera.faixaZoom.upperBound)
-        return min(max(f, Double(d.minAvailableVideoZoomFactor)), teto)
+        return LimitesDeCamera.zoom(min(max(f, Double(d.minAvailableVideoZoomFactor)), teto), min: Double(d.minAvailableVideoZoomFactor), max: Double(d.maxAvailableVideoZoomFactor))
     }
 
     /// Botão de lente no dispositivo virtual: rampa curta de zoom. Não reconfigura a sessão, não muda o codificador,
@@ -697,7 +857,9 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         guard let d = dispositivoAtual, let alvo = fatorVirtual(a, d) else { return }
         do { try d.lockForConfiguration() } catch { return }
         defer { d.unlockForConfiguration() }
-        guard let taxa = RampaZoom.taxa(de: Double(d.videoZoomFactor), para: alvo) else { d.videoZoomFactor = CGFloat(alvo); return }
+        guard let taxa = RampaZoom.taxa(de: Double(d.videoZoomFactor), para: alvo), taxa.isFinite, taxa > 0 else {
+            d.videoZoomFactor = CGFloat(zoomSeguro(alvo, d)); return
+        }
         Log.captura.notice("fmcam captura: rampa de zoom \(d.videoZoomFactor, format: .fixed(precision: 2), privacy: .public) para \(alvo, format: .fixed(precision: 2), privacy: .public) (lente \(a.lente.rawValue, privacy: .public))")
         d.ramp(toVideoZoomFactor: CGFloat(alvo), withRate: taxa)
         filaSessao.asyncAfter(deadline: .now() + RampaZoom.duracaoPadrao + 0.2) {
@@ -742,19 +904,20 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
     private func publicarLimites(_ d: AVCaptureDevice, _ dim: DimensoesVideo) {
         let f = d.activeFormat
         let maxObt = min(f.maxExposureDuration.seconds, d.activeVideoMinFrameDuration.seconds)
+        let ev = LimitesCamera.faixaEV(aparelhoMin: Double(d.minExposureTargetBias), aparelhoMax: Double(d.maxExposureTargetBias))
         aoLimites?(LimitesCamera(isoMin: Double(f.minISO), isoMax: Double(f.maxISO),
-                                 obturadorMin: f.minExposureDuration.seconds, obturadorMax: maxObt))
+                                 obturadorMin: f.minExposureDuration.seconds, obturadorMax: maxObt,
+                                 evMin: ev.min, evMax: ev.max))
         aoDimensao?(dim)
     }
 
     private func tratarErroDeExecucao(_ msg: String) {
         guard emPrimeiroPlano || consumidorAtual() != nil else { return }
-        guard !tentouReiniciar else {
+        guard reinicio.podeTentar(agora: Date()) else {
             aoEstado?(.erro("A câmera parou: \(msg)"))
             consumidorAtual()?.aoFalha("A câmera parou: \(msg)")
             return
         }
-        tentouReiniciar = true
         Log.captura.notice("fmcam captura: tentando religar a câmera uma vez")
         sessao.startRunning()
         Log.captura.notice("fmcam captura: religar, isRunning=\(self.sessao.isRunning, privacy: .public)")
@@ -768,7 +931,7 @@ final class CapturaCompartilhada: NSObject, MotorDeCaptura, AVCaptureVideoDataOu
         trava.unlock()
         if primeiro, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
             let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
-            Log.captura.notice("fmcam captura: primeiro quadro \(w, privacy: .public)x\(h, privacy: .public)\(h > w ? " (EM PÉ, errado)" : "", privacy: .public)")
+            Log.captura.notice("fmcam captura: primeiro quadro \(w, privacy: .public)x\(h, privacy: .public)\(h > w ? " (em pé)" : "", privacy: .public)")
         }
         c?.amostra(sampleBuffer)
     }
@@ -837,13 +1000,15 @@ final class FonteCamera: FonteDeVideo {
     /// Formato novo: reconfigura a câmera e recria o codificador, que manda tipo 1 e quadro-chave (mesmo caminho da lente).
     func reconfigurar(_ config: ConfigVideo, completion: @escaping (Result<DimensoesVideo, ErroFonte>) -> Void) {
         trava.lock()
+        // `preset` é o último formato PEDIDO (não o último que terminou): se a troca anterior ainda anda e este pedido volta
+        // ao formato de antes, ele precisa ir para a câmera também.
         let presetAntes = preset
         let cod = codificador
         let fechada = parado
+        if !fechada, cod != nil { bitrate = config.bitrate; preset = config.preset }
         trava.unlock()
         guard !fechada, let cod else { completion(.failure(.camera("Conexão encerrada."))); return }
         if config.preset == presetAntes {
-            trava.lock(); bitrate = config.bitrate; trava.unlock()
             cod.ajustarBitrate(config.bitrate)
             completion(.success(DimensoesVideo(largura: cod.largura, altura: cod.altura, fps: cod.fps)))
             return
@@ -852,12 +1017,11 @@ final class FonteCamera: FonteDeVideo {
             guard let self else { return }
             switch r {
             case .failure(let e):
+                self.trava.lock()
+                if self.preset == config.preset { self.preset = presetAntes }
+                self.trava.unlock()
                 completion(.failure(e))
             case .success(let dim):
-                self.trava.lock()
-                self.preset = config.preset
-                self.bitrate = config.bitrate
-                self.trava.unlock()
                 self.reconfigurou(dim)
                 completion(.success(dim))
             }
@@ -886,7 +1050,11 @@ final class FonteCamera: FonteDeVideo {
             novo.aoEvento = { [weak self] ev in self?.aoEvento?(ev) }
             codificador = novo
             trava.unlock()
+            // O que o codificador velho ainda segura é do tamanho antigo: soltar isso depois do tipo 1 novo faria o
+            // decodificador do OBS receber quadro de referência do formato errado.
+            atual.aoEvento = nil
             atual.finalizar()
+            aoEvento?(.dimensao(dim))
         } catch {
             trava.unlock()
             aoEvento?(.erro("Falha ao recriar o codificador."))

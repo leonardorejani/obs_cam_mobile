@@ -61,4 +61,17 @@ final class ZoomTests: XCTestCase {
             XCTFail("estabilização ligada sem suporte no virtual cai para a física")
         }
     }
+
+    func testVirtualSemFocoManualNemBrancoEmKUsaCameraFisica() {
+        // medido no 15 Pro Max: o dispositivo virtual não suporta lente custom nem ganhos custom
+        XCTAssertFalse(ControleManual.dispositivoServe(focoManual: true, brancoEmK: false, suportaLenteCustom: false, suportaGanhosCustom: false))
+        XCTAssertFalse(ControleManual.dispositivoServe(focoManual: false, brancoEmK: true, suportaLenteCustom: true, suportaGanhosCustom: false))
+        XCTAssertTrue(ControleManual.dispositivoServe(focoManual: false, brancoEmK: false, suportaLenteCustom: false, suportaGanhosCustom: false))
+        XCTAssertTrue(ControleManual.dispositivoServe(focoManual: true, brancoEmK: true, suportaLenteCustom: true, suportaGanhosCustom: true))
+        if case .fisica = ModoCamera.escolher(virtualExiste: true, virtualTemFormato: true, estabilizar: false, virtualEstabiliza: true, virtualServeAoManual: false) {} else {
+            XCTFail("foco manual precisa da câmera física")
+        }
+        XCTAssertTrue(ControleManual.precisa(focoManual: true, brancoEmK: false))
+        XCTAssertFalse(ControleManual.precisa(focoManual: false, brancoEmK: false))
+    }
 }

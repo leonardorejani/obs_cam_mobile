@@ -1,6 +1,6 @@
 # OBS Cam Mobile: handoff
 
-Atualizado em 18/11/2026, 13:40. Para quem pegar o projeto do zero (outra sessão ou o próprio Leonardo daqui a um mês).
+Atualizado em 24/11/2026 (varredura 2, versão 1.0.4). Relatórios: `docs/varreduras/varredura-1.md` e `docs/varreduras/varredura-2.md`. Para quem pegar o projeto do zero (outra sessão ou o próprio Leonardo daqui a um mês).
 
 ## O que é
 
@@ -21,6 +21,21 @@ Branch `feat/m0`, **nada commitado** (commit só com autorização). Apresentaç
 | Qualidade de envio | Definida no iPhone (Ajustes > Qualidade: resolução, quadros, bitrate) ou fixada no OBS ("Definida no iPhone" é o padrão da extensão). Troca no meio da conexão sem reconectar. Ver `docs/PROTOCOLO.md` |
 | Instalador Windows | `dist/OBSCamMobile-Extension-Setup.exe` (NSIS, `obs-plugin/scripts/montar-instalador-windows.sh`): instala o Apple Mobile Device Support 20.0.1.47 (MSI da Apple, assinatura verificada, uso interno, fora do git) e a extensão. Nunca rodou num Windows |
 | SideStore | Não instalado ainda. `iloader` em /Applications, `dist/OBSCamMobile.ipa` pronto. Falta o Leonardo: LocalDevVPN e Apple ID no iloader. Plano: renovação automática do SideStore ligada + automação no Atalhos ("Dias para vencer" do OBS Cam Mobile <= 2 roda "Refresh All Apps") |
+
+## Versão 1.0.4 (24/11/2026, varredura 2)
+
+- App 1.0.4 build 9 e extensão 1.0.4. Só correções, sem função nova. Detalhe em `docs/varreduras/varredura-2.md`.
+- Troca de qualidade com a conexão aberta: o vídeo parava 1 a 1,6 s (encostando no watchdog de 1,5 s do iPhone). Agora a mesma câmera só troca o formato ativo: cerca de 0,6 s.
+- Qualidade escolhida no iPhone sem o OBS conectado vai na hora para a câmera (antes o "Formato" do topo continuava no velho).
+- Câmera sem permissão, pausada pelo iOS ou com erro aparece como aviso no meio da tela. Branco travado sem temperatura escolhida mostra "Atual" em vez de "5500 K".
+- Extensão: "(pedido ...)" falso com o iPhone em pé, "Quando o iPhone cair" agora vale na hora com o iPhone já caído, o estado diz tela preta ou imagem quando é isso que aparece, reserva presa ao remover a fonte durante o handshake, combo de bitrate do painel com o valor real do iPhone e sem o 25 Mbps que o app não tem.
+
+## Versão 1.0.3 (24/11/2026, varredura 1)
+
+- App 1.0.3 build 8 instalado no 15 Pro Max (bundle do SideStore). Extensão 1.0.3 no OBS do Mac e no instalador do Windows.
+- Novidades da extensão: status ao vivo nas propriedades, Modo de recepção (Menor atraso / Mais estável), Quando o iPhone cair (último quadro / tela preta / imagem), Decodificação (automática / hardware / software), Encaixar na tela sozinho, painel com controle remoto (lente, EV, travas AE/AF/BB, qualidade) e botão Testar. Protocolo ganhou os comandos e campos do controle remoto (ver `PROTOCOLO.md`).
+- 4K medido no OBS de verdade (libobs sem janela, `medir_obs`): 2160p30 a cerca de 81 ms da captura até o quadro entregue ao OBS e 90 a 105 ms até o canvas desenhado. 1080p30: 54 ms e cerca de 60 ms.
+- `obs-plugin/tests/medir_obs.cc`: ferramenta de medição no aparelho (não roda no ctest).
 
 ## Números medidos (iPhone real, cabo, 1080p30)
 
@@ -49,7 +64,7 @@ Branch `feat/m0`, **nada commitado** (commit só com autorização). Apresentaç
 
 ## Ainda não provado
 
-- Atraso vidro a vidro, 4K e 120 fps no aparelho, 2 h no ar (calor), vários iPhones reais, Windows.
+- Atraso vidro a vidro, 120 fps no aparelho, 2 h no ar (calor), vários iPhones reais, Windows. O 4K foi medido até o canvas do libobs (varredura 1).
 - Uma queda rara dentro do FFmpeg só sob ThreadSanitizer (ASan limpo). Investigar se repetir.
 
 ## Esperando o Leonardo
@@ -68,9 +83,18 @@ Branch `feat/m0`, **nada commitado** (commit só com autorização). Apresentaç
 
 - Estabilização ligada no iPhone soma 1 a 2 quadros de atraso (medido 18/11: 85 ms com ela, ~45 ms sem).
 - Teste de Bonjour do plugin enxerga iPhones reais na rede: os testes filtram pelos próprios ids.
+- O libobs adia o `obs_source_update` de fonte de vídeo para o próximo tick de vídeo: em teste sem vídeo a opção tem que nascer nas configurações da criação.
+- Ferramenta que inicia o vídeo do libobs (OpenGL) e cai gera relatório de falha do macOS: soltar cena e fonte e chamar `obs_wait_for_destroy_queue()` antes do `obs_shutdown`.
+- `idevicescreenshot` não funciona no iOS 27 sem a imagem de desenvolvedor: foto da tela pelo app com `FMCAM_DEBUG=1` e `fmcam.d.snap`, depois `devicectl device copy from` (Documents/snap-N.png).
 
 - Não testar com aparelho de outra pessoa. Só o iPhone do Leonardo.
 - Nada abre janela na tela dele. Testes iOS no simulador derrubando o processo abrem o aviso "encerrou inesperadamente" no Mac: teste nunca pode crashar.
 - O iPhone atende um cliente por vez: com o OBS conectado, o visor recebe "ocupado".
 - Câmera virtual do OBS no Mac precisa de aprovação em Ajustes > Geral > Itens de Início e Extensões > Extensões de Câmera (já aprovada nesta máquina) e saída em "Programa".
 - O plugin do DroidCam é GPLv2: ler pode, copiar trecho não.
+
+## 1.0.5 (24/11/2026)
+
+- Ao girar, a janela vira na hora e `dimCamera` só muda depois do debounce e da troca do codificador. Layout de controle nunca usa `dimCamera` para saber o lado: controles seguem a janela, guias e borda do NO AR seguem `anguloFisico` (`MedidasTela.proporcao`). Teste: `testGirarNaoDesmontaATelaEnquantoOVideoNaoTroca`.
+- Em pé, os botões do trilho têm largura igual (`MedidasTela.larguraItemEmPe`). A paisagem não mudou.
+- Instalar pelo cabo com o perfil do SideStore deixa o SideStore com a versão antiga guardada. Depois, instalar o mesmo .ipa pelo + dele.

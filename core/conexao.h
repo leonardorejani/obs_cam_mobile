@@ -27,6 +27,10 @@ struct OpcoesConexao {
   int atrasoReconexaoMs = 500;
   int timeoutSemDadosMs = 3000;
   int intervaloPingMs = 1000;
+  // Consultado na thread da conexao antes de CADA tentativa (nunca no meio de uma). Falso = nao toca no iPhone agora:
+  // espera 200 ms e pergunta de novo, sem contar reconexao nem avisar queda. Serve para a extensao nao brigar por um
+  // iPhone que outra fonte do mesmo processo ja segura. Tem que ser rapido e nao pode chamar a propria Conexao.
+  std::function<bool()> podeConectar;
 };
 
 class Conexao {
@@ -58,6 +62,8 @@ class Conexao {
 
   bool enviarComando(const std::string& json);  // {"cmd":"keyframe"} etc.
   RespostaHandshake resposta() const;           // da conexao atual (ou da ultima)
+  // Ultima recusa "ocupado" (o iPhone manda o `id` dele nela, quando o app e novo): quem segura o aparelho.
+  RespostaHandshake recusa() const;
   bool sincronizada() const;
   // Atraso de cano (us) de um quadro, ou false se ainda nao houve pong.
   bool atrasoUs(uint64_t chegadaUs, uint64_t tempoQuadro, int64_t& atraso) const;
@@ -81,5 +87,11 @@ class Conexao {
   std::shared_ptr<Nucleo> n_;
   std::thread th_;
 };
+
+// Threads que a Conexao solta (detach): o vigia da entrada USB e a thread de uma conexao cujo callback demorou no
+// parar(). Quem descarrega uma DLL/plugin espera ate `ms` que todas terminem (no Windows, thread viva com o codigo da
+// DLL descarregado derruba o processo ao fechar o OBS).
+int threadsSoltas();
+bool aguardarThreadsSoltas(int ms);
 
 }  // namespace fmappcam

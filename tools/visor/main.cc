@@ -43,6 +43,8 @@ struct Config {
   std::string pngDir;
   int pngCada = 0;
   bool permitirPerdas = false, permitirErros = false, permitirQuedas = false;
+  std::string preset = "1080p30";  // "iphone" = nao manda (vale a qualidade salva no iPhone)
+  int64_t bitrate = 10000000;      // 0 = nao manda
 };
 
 void criarPasta(const std::string& d) {
@@ -111,7 +113,8 @@ bool gravarPng(const AVFrame* f, const std::string& caminho) {
 
 struct Janela {
   uint64_t quadros = 0;
-  std::vector<double> atrasos;  // ms
+  std::vector<double> atrasos;  // ms, captura ate a chegada
+  std::vector<double> entregas;  // ms, captura ate o quadro decodificado (o que a fonte do OBS entregaria)
   double decodSoma = 0, decodMax = 0;
   void zerar() { *this = Janela(); }
 };
@@ -160,7 +163,7 @@ class Alvo {
   }
   struct Total {
     uint64_t quadros = 0, perdidos = 0, errosDec = 0, pngs = 0;
-    double fps = 0, p50 = 0, p95 = 0, max = 0, decodMedio = 0, decodMax = 0;
+    double fps = 0, p50 = 0, p95 = 0, max = 0, decodMedio = 0, decodMax = 0, entregaP50 = 0, entregaP95 = 0;
     int w = 0, h = 0;
     std::string nome, id, aparelho;
     int reconexoes = 0;
@@ -178,6 +181,8 @@ class Alvo {
     t.p95 = percentil(atrasos_, 0.95);
     t.max = atrasos_.empty() ? 0 : *std::max_element(atrasos_.begin(), atrasos_.end());
     t.amostrasAtraso = atrasos_.size();
+    t.entregaP50 = percentil(entregas_, 0.5);
+    t.entregaP95 = percentil(entregas_, 0.95);
     t.decodMedio = quadros_ ? decodSoma_ / double(quadros_) : 0;
     t.decodMax = decodMax_;
     auto r = con_.resposta();
@@ -243,11 +248,20 @@ class Alvo {
     }
 
     const uint64_t d0 = agoraMonotonicoUs();
-    auto r = dec_.decodificar(p.dados.data() + 1, p.dados.size() - 1);
+    auto r = dec_.decodificar(p.dados.data() + 1, p.dados.size() - 1, (p.dados[0] & 1) != 0);
+    if (dec_.usaHardware() && !avisouHw_) {
+      avisouHw_ = true;
+      std::printf("[%s] decodificador: hardware\n", rotulo_.c_str());
+    }
+    if (dec_.aguardaChaveParaHardware() && !pediuChaveHw_) {
+      pediuChaveHw_ = true;
+      con_.enviarComando("{\"cmd\":\"keyframe\"}");
+    }
     const double decMs = double(agoraMonotonicoUs() - d0) / 1000.0;
 
-    int64_t atrasoUs = 0;
+    int64_t atrasoUs = 0, entregaUs = 0;
     bool temAtraso = con_.atrasoUs(chegada, p.tempo, atrasoUs);
+    bool temEntrega = con_.atrasoUs(agoraMonotonicoUs(), p.tempo, entregaUs);
     AVFrame* clone = nullptr;
     {
       std::lock_guard<std::mutex> l(m_);
@@ -266,6 +280,10 @@ class Alvo {
         if (temAtraso) {
           atrasos_.push_back(double(atrasoUs) / 1000.0);
           janela_.atrasos.push_back(double(atrasoUs) / 1000.0);
+        }
+        if (temEntrega) {
+          entregas_.push_back(double(entregaUs) / 1000.0);
+          janela_.entregas.push_back(double(entregaUs) / 1000.0);
         }
         if (!pasta_.empty() && cfg_.pngCada > 0 && (quadros_ - 1) % static_cast<uint64_t>(cfg_.pngCada) == 0)
           clone = av_frame_clone(dec_.quadro());
@@ -316,11 +334,13 @@ class Alvo {
   Config cfg_;
   Conexao con_;
   Decodificador dec_;
+  bool pediuChaveHw_ = false;
+  bool avisouHw_ = false;
   std::string pasta_;
 
   std::mutex m_;
   Janela janela_;
-  std::vector<double> atrasos_;
+  std::vector<double> atrasos_, entregas_;
   uint64_t quadros_ = 0, perdidos_ = 0, errosDec_ = 0, pngs_ = 0;
   uint64_t primeiraChegada_ = 0, ultimaChegada_ = 0;
   double decodSoma_ = 0, decodMax_ = 0;
@@ -341,6 +361,7 @@ void uso() {
   std::fputs(
       "uso: visor (--tcp host:porta [--tcp ...] | --usb [--udid X ...] [--todos] [--listar]) [--usbmux-socket CAMINHO]\n"
       "       [--segundos S] [--png-dir DIR --png-cada N] [--permitir-perdas] [--permitir-erros] [--permitir-quedas]\n"
+      "       [--preset 1080p30|2160p30|...|iphone] [--bitrate KBPS|0]\n"
       "  --usb sozinho lista os aparelhos do cabo e sai. --todos conecta em todos ao mesmo tempo.\n",
       stderr);
 }
@@ -372,6 +393,8 @@ int main(int argc, char** argv) {
     else if (a == "--permitir-perdas") cfg.permitirPerdas = true;
     else if (a == "--permitir-erros") cfg.permitirErros = true;
     else if (a == "--permitir-quedas") cfg.permitirQuedas = true;
+    else if (a == "--preset") cfg.preset = val();
+    else if (a == "--bitrate") cfg.bitrate = std::atoll(val().c_str()) * 1000;
     else { uso(); return 2; }
   }
   if (cfg.tcp.empty() && !cfg.usb && !cfg.listar) { uso(); return 2; }
@@ -397,6 +420,8 @@ int main(int argc, char** argv) {
   const bool varios = cfg.tcp.size() + cfg.udids.size() > 1 || cfg.todos;
   auto novoAlvo = [&](const std::string& rotulo, OpcoesConexao op) {
     op.pedido.cliente = "fmcam-visor";
+    op.pedido.preset = cfg.preset == "iphone" ? "" : cfg.preset;
+    op.pedido.bitrate = cfg.bitrate;
     auto a = std::make_unique<Alvo>(rotulo, std::move(op), cfg);
     if (!cfg.pngDir.empty() && varios) a->definirPasta(cfg.pngDir + "/" + limpar(rotulo));
     a->iniciar();
@@ -455,11 +480,12 @@ int main(int argc, char** argv) {
       if (j.quadros > 0) comecou[i] = true;
       else if (comecou[i] && s < cfg.segundos) ++semVideo[i];
       auto t = a->total();
-      std::printf("[%s] t=%ds fps=%.1f perdidos=%llu erros_dec=%llu atraso_ms p50=%.1f p95=%.1f max=%.1f decod_ms=%.2f\n",
+      std::printf("[%s] t=%ds fps=%.1f perdidos=%llu erros_dec=%llu atraso_ms p50=%.1f p95=%.1f max=%.1f decod_ms=%.2f "
+                  "entrega_ms p50=%.1f\n",
                   a->rotulo().c_str(), s, double(j.quadros), (unsigned long long)t.perdidos,
                   (unsigned long long)t.errosDec, percentil(j.atrasos, 0.5), percentil(j.atrasos, 0.95),
                   j.atrasos.empty() ? 0.0 : *std::max_element(j.atrasos.begin(), j.atrasos.end()),
-                  j.quadros ? j.decodSoma / double(j.quadros) : 0.0);
+                  j.quadros ? j.decodSoma / double(j.quadros) : 0.0, percentil(j.entregas, 0.5));
     }
     std::fflush(stdout);
   }
@@ -474,11 +500,11 @@ int main(int argc, char** argv) {
         "RESUMO {\"aparelho\":%s,\"nome\":%s,\"id\":%s,\"modelo\":%s,\"segundos\":%d,\"quadros\":%llu,\"fps\":%.2f,"
         "\"perdidos\":%llu,\"erros_decodificacao\":%llu,\"atraso_ms_p50\":%.2f,\"atraso_ms_p95\":%.2f,"
         "\"atraso_ms_max\":%.2f,\"amostras_atraso\":%zu,\"decod_ms_medio\":%.2f,\"decod_ms_max\":%.2f,"
-        "\"pngs\":%llu,\"reconexoes\":%d,\"segundos_sem_video\":%d,\"largura\":%d,\"altura\":%d}\n",
+        "\"entrega_ms_p50\":%.2f,\"entrega_ms_p95\":%.2f,\"pngs\":%llu,\"reconexoes\":%d,\"segundos_sem_video\":%d,\"largura\":%d,\"altura\":%d}\n",
         jsonTexto(a->rotulo()).c_str(), jsonTexto(t.nome).c_str(), jsonTexto(t.id).c_str(), jsonTexto(t.aparelho).c_str(),
         cfg.segundos, (unsigned long long)t.quadros, t.fps, (unsigned long long)t.perdidos,
         (unsigned long long)t.errosDec, t.p50, t.p95, t.max, t.amostrasAtraso, t.decodMedio, t.decodMax,
-        (unsigned long long)t.pngs, t.reconexoes, semVideo[i], t.w, t.h);
+        t.entregaP50, t.entregaP95, (unsigned long long)t.pngs, t.reconexoes, semVideo[i], t.w, t.h);
     if (t.quadros == 0) saida = std::max(saida, 3);
     else if ((t.perdidos > 0 && !cfg.permitirPerdas) || (t.errosDec > 0 && !cfg.permitirErros) ||
              ((t.reconexoes > 0 || semVideo[i] > 0) && !cfg.permitirQuedas))

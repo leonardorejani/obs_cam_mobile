@@ -422,8 +422,10 @@ enum Handshake {
     }
 
     /// `erro`: "versao", "ocupado", "handshake" ou "camera".
-    static func respostaErro(_ erro: String) -> Data {
+    /// `id`: só o "ocupado" leva (quem conecta descobre se quem segura a vaga é uma fonte dele mesmo).
+    static func respostaErro(_ erro: String, id: String? = nil) -> Data {
         var obj: [String: Any] = ["ok": false, "erro": erro]
+        if erro == "ocupado", let id, !id.isEmpty { obj["id"] = id }
         if erro == "versao" { obj["v_suportadas"] = Protocolo.versoesSuportadas }
         return linha(obj)
     }

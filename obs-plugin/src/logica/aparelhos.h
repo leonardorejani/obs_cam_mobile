@@ -47,7 +47,33 @@ struct StatusIphone {
   bool bitrateObs = false;    // o OBS fixou o bitrate (campo "bitrate_obs", ausente = false)
   bool noAr = false;        // tally que a extensao mandou
   bool noArIphone = false;  // "noar" que o iPhone devolveu no status (confirma que recebeu)
+  // Controle remoto (status de app 1.0.3+, ausentes em app antigo): botoes de lente que o aparelho oferece, o botao em
+  // uso, faixa do EV, preset em uso e o estado das tres travas do trilho como a tela do iPhone mostra.
+  std::vector<double> lentes;
+  double fator = 0;
+  double evMin = 0, evMax = 0;
+  bool temFaixaEv = false;
+  std::string preset;
+  bool temTravas = false;
+  bool travaAe = false, travaAf = false, travaBb = false;
+  // Medido pela extensao (nao vem do iPhone): atraso da captura no iPhone ate o quadro entregue ao OBS, nos ultimos
+  // ~3 s (p50 e p95), ida e volta do ping, quadros que o decodificador pulou e se a conexao e pelo cabo.
+  double atrasoMs = -1, atrasoP95Ms = -1;
+  double idaEVoltaMs = -1;
+  uint64_t descartados = 0;
+  bool canalCabo = false;  // pelo cabo (entrada USB do usbmuxd); false = Wi-Fi ou entrada de rede
 };
+
+// Resultado do botao "Testar" do painel, a partir das medidas acima (pura, testavel).
+struct ResultadoTeste {
+  enum class Nivel { Ok, Atencao, Ruim, SemDados };
+  Nivel nivel = Nivel::SemDados;
+  std::vector<std::string> avisos;  // chaves de locale ("Teste.Wifi", "Teste.AtrasoAlto", ...)
+};
+// Criterios (documentados em docs/GUIA-OPERADOR.md): sem conexao ou sem medida = SemDados. Pelo Wi-Fi ou entrada de rede
+// = Atencao ("Teste.Wifi"). Atraso p95 acima de 150 ms = Atencao, acima de 300 ms = Ruim. Ida e volta do ping acima de
+// 20 ms no cabo = Atencao. fps abaixo de 90% do alvo = Atencao. Quadros pulados pelo decodificador = Atencao.
+ResultadoTeste avaliarTeste(const StatusIphone& s, bool conectado);
 
 struct InfoAparelho {
   std::string udid;
@@ -99,19 +125,28 @@ class RegistroAparelhos {
   std::string nomeConhecido(const std::string& udid) const;  // rotulo guardado de uma conexao anterior ("" se nunca vi)
 
   // Uma fonte por iPhone dentro do processo. Devolve false se outra dona ja segura o aparelho.
-  bool reservar(const std::string& udid, const void* dona);
+  // O aparelho e o iPhone, nao o caminho: "UDID" (cabo), "wifi:<id>" (Bonjour) e "wifi:<ip>" (manual) do mesmo iPhone
+  // disputam a mesma vaga quando o registro sabe que sao o mesmo (id do app aprendido no handshake, ou `idApp` dado
+  // por quem ja descobriu, ex.: o id que o iPhone devolve na recusa "ocupado").
+  bool reservar(const std::string& udid, const void* dona, const std::string& idApp = "");
   void liberar(const std::string& udid, const void* dona);
+  bool ehDona(const std::string& udid, const void* dona) const;
 
   // Chamados pelas sessoes.
   void definirIdentidade(const std::string& udid, const std::string& nome, const std::string& modelo,
                          const std::string& idApp, int w, int h);
   void definirEstado(const std::string& udid, EstadoAparelho e, const std::string& mensagem, bool pelaRede = false);
   void definirStatus(const std::string& udid, const StatusIphone& s);
+  // Canal de comando da sessao dona (controle remoto do painel). So a dona define, e liberar() apaga.
+  void definirCanal(const std::string& udid, const void* dona, std::function<bool(const std::string&)> canal);
+  // Manda um comando tipo 4 ao iPhone pela sessao que o segura. Falso se nenhuma sessao conectada o segura.
+  bool enviarComando(const std::string& udid, const std::string& json) const;
 
  private:
   struct Dados {
     InfoAparelho info;
     const void* dona = nullptr;
+    std::function<bool(const std::string&)> canal;
   };
   void notificar();
   InfoAparelho montar(const std::string& udid, const Dados* d, bool noCabo) const;

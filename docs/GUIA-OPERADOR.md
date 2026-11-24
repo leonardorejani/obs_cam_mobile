@@ -31,6 +31,22 @@ Para quem opera a transmissão. Não precisa de conhecimento técnico: é só se
 - **Estabilização:** deixe **desligada** na transmissão. Ligada, ela atrasa a imagem.
 - **Qualidade:** Ajustes > Qualidade. Se o OBS fixou o formato ou o bitrate, aquela linha aparece travada.
 
+## No OBS (extensão 1.0.4)
+
+**Propriedades da fonte** (clique duas vezes na fonte):
+
+- **Status ao vivo**, logo abaixo do estado: canal (Cabo ou Wi-Fi), formato, atraso do iPhone até o OBS em ms, quadros por segundo, bitrate, bateria e temperatura. Atualiza sozinho a cada 2 s enquanto o iPhone manda vídeo.
+- **Modo de recepção:** **Menor atraso** (padrão, use no cabo) ou **Mais estável** (guarda uma reserva de cerca de 120 ms para o vídeo não engasgar num Wi-Fi ruim). Trocar reconecta a fonte (1 a 2 s com o último quadro).
+- **Quando o iPhone cair:** **Manter o último quadro** (padrão), **Tela preta** ou **Imagem** (escolha o arquivo logo abaixo). Vale na hora, sem reconectar, inclusive com o iPhone já caído. Quando o iPhone volta, o vídeo volta sozinho.
+- **Decodificação:** **Automática** (padrão: hardware acima de 1080p), **Hardware** ou **Software**. Use Hardware se o 4K atrasar num PC fraco. Trocar reconecta a fonte.
+- **Encaixar na tela sozinho:** ligado, o item da cena fica no mesmo lugar e do mesmo tamanho quando o iPhone gira ou a resolução muda, e o vídeo novo cabe dentro dele. Nasce ligado em fonte nova. Fonte criada antes da 1.0.3 fica desligada até você marcar. Não mexe em item com recorte ou espelhado, e item que já tem "caixa delimitadora" (bounds) o OBS já mantém sozinho.
+
+**Painel OBS Cam Mobile** (menu Docks), por iPhone:
+
+- **Lente** (0,5 / 1 / 2 / 5), **EV** (menos e mais, de 0,3 em 0,3), **Trava AE**, **Trava AF**, **Trava BB** e **Qualidade** (resolução, quadros e bitrate, com **Aplicar**). Cada botão faz o mesmo que o toque na tela do iPhone, e o iPhone mostra na hora. O que a fonte do OBS fixou (predefinição ou bitrate nas propriedades) aparece travado no painel.
+- iPhone com app antigo mostra "Atualize o app do iPhone para controlar pelo OBS".
+- **Testar:** mede 3 s e diz se o cabo está ok. Critérios: pelo Wi-Fi ou pela entrada de rede = ressalva. Atraso (p95) acima de 150 ms = ressalva, acima de 300 ms = atraso alto. Ida e volta acima de 20 ms no cabo = ressalva. Menos de 90% dos quadros pedidos = ressalva. Quadros pulados pelo computador = ressalva.
+
 ## Se der problema
 
 | O que aparece | O que fazer |

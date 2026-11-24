@@ -11,6 +11,17 @@ enum Nivel {
         // com gx negativo o topo do aparelho aponta para a esquerda, com gx positivo para a direita
         return gx < 0 ? t : -t
     }
+
+    /// Inclinação do horizonte nas quatro posições. Em paisagem é `angulo(gx:gy:)`, sem mudar nada. Em pé (a gravidade cai
+    /// mais no eixo y) o horizonte corre pelo eixo x. Deitado na mesa ou na diagonal sem lado claro: nil.
+    static func anguloEmQualquerPosicao(gx: Double, gy: Double) -> Double? {
+        if abs(gx) >= abs(gy) { return angulo(gx: gx, gy: gy) }
+        let vertical = abs(gy)
+        guard vertical > 0.5 else { return nil }
+        let t = atan2(gx, vertical) * 180 / .pi
+        // De cabeça para cima o topo do aparelho a ir para a direita faz o horizonte da imagem girar para a esquerda.
+        return gy < 0 ? -t : t
+    }
 }
 
 /// "Nivelado" com histerese: entra com menos de 1 grau e só sai com mais de 1,5 grau, para a linha não piscar.

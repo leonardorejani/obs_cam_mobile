@@ -12,7 +12,7 @@
   <p><strong>Liga o iPhone no cabo, abre o app e a imagem já está no OBS.</strong></p>
 
   <p>
-    <img src="https://img.shields.io/badge/vers%C3%A3o-1.0.1-4A4A4A?style=for-the-badge&labelColor=0E0E0E" alt="versão 1.0.1" />
+    <img src="https://img.shields.io/badge/vers%C3%A3o-1.0.5-4A4A4A?style=for-the-badge&labelColor=0E0E0E" alt="versão 1.0.5" />
     <img src="https://img.shields.io/badge/iOS-16%2B-0E0E0E?style=for-the-badge&logo=apple&logoColor=white" alt="iOS 16+" />
     <img src="https://img.shields.io/badge/OBS-33.0.1-0E0E0E?style=for-the-badge&logo=obsstudio&logoColor=white" alt="OBS 33.0.1" />
     <img src="https://img.shields.io/badge/Swift-SwiftUI-0E0E0E?style=for-the-badge&logo=swift&logoColor=white" alt="Swift" />
@@ -44,7 +44,7 @@
 ```yaml
 produto:   app de câmera para iPhone + extensão do OBS que recebe o vídeo pelo cabo ou Wi-Fi
 quem_usa:  quem opera transmissões ao vivo com OBS no Windows ou no Mac
-estado:    1.0.1, em uso interno
+estado:    1.0.5, em uso interno
 ```
 
 <!-- /readme-padrao:header -->
@@ -61,6 +61,8 @@ Quem transmite com OBS e quer usar o iPhone como câmera costuma cair em app de 
 - **Qualidade no celular ou no OBS.** 720p, 1080p ou 4K, 30, 60 ou 120 quadros, bitrate de 6 a 30 Mbps. O OBS pode fixar o formato ou o bitrate, e só aquele campo fica travado no celular.
 - **NO AR.** Quando a cena com o iPhone entra no ar no OBS, o celular mostra a borda e o selo vermelhos.
 - **Modo limpo.** Some toda a interface e ficam só grade, cruz e nível. As guias nunca vão para o vídeo enviado.
+- **Controle pelo OBS.** O painel OBS Cam Mobile troca lente, EV, travas AE, AF e BB e a qualidade de cada iPhone, e o botão Testar mede o atraso e diz se o cabo está ok. As propriedades da fonte mostram o status ao vivo (canal, formato, atraso, fps, bitrate, bateria, temperatura).
+- **Fonte que se ajeita sozinha.** Girou o iPhone ou trocou a resolução: o item da cena fica no mesmo lugar. Dá para escolher o que aparece quando o iPhone cai (último quadro, tela preta ou uma imagem), o modo de recepção (menor atraso ou mais estável) e a decodificação (automática, hardware ou software).
 - **Validade à vista.** O app mostra quantos dias faltam para a assinatura vencer e tem o atalho "Dias para vencer" para o app Atalhos.
 
 <div align="center">
@@ -83,7 +85,7 @@ Quem transmite com OBS e quer usar o iPhone como câmera costuma cair em app de 
 - **Protocolo próprio** (`docs/PROTOCOLO.md`): uma linha de JSON de cada lado para combinar formato e lente, depois pacotes binários de configuração, quadro, status e comando. O relógio dos dois lados é sincronizado por ping, e é assim que o atraso é medido.
 - **Fila curta de propósito.** O iPhone nunca acumula vídeo velho: no máximo 1 segundo na fila. Se a rede engasgar, ele descarta até o próximo quadro-chave.
 - **Um computador por iPhone.** O iPhone atende uma conexão por vez. Outra fonte tentando o mesmo aparelho vê "iPhone ocupado".
-- **Medido no aparelho:** cerca de 45 ms do iPhone até o computador pelo cabo em 1080p, e 10 minutos seguidos a 60 quadros sem nenhum quadro perdido.
+- **Medido no aparelho:** cerca de 45 ms do iPhone até o computador pelo cabo em 1080p, e 10 minutos seguidos a 60 quadros sem nenhum quadro perdido. Em 4K (2160p30) no iPhone 15 Pro Max, cerca de 80 ms até o quadro entregue ao OBS e cerca de 90 ms até o canvas desenhado (24/11/2026, `docs/varreduras/varredura-1.md`).
 
 ## Requisitos
 

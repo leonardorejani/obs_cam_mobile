@@ -20,4 +20,15 @@ AjusteBounds decidirAjuste(const TransformacaoItem& t, int lw, int lh, int cw, i
   return r;
 }
 
+AjusteBounds decidirEncaixe(const TransformacaoItem& t, int lw, int lh) {
+  AjusteBounds r;
+  if (lw <= 0 || lh <= 0 || t.temBounds || t.recortado || t.escalaX <= 0 || t.escalaY <= 0) return r;
+  r.aplicar = true;
+  r.posX = t.posX;
+  r.posY = t.posY;
+  r.boundsLargura = t.escalaX * lw;
+  r.boundsAltura = t.escalaY * lh;
+  return r;
+}
+
 }  // namespace fmcam

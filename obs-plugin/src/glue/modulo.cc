@@ -7,6 +7,7 @@
 #include <mutex>
 #include <vector>
 
+#include "conexao.h"
 #include "config_fonte.h"
 #include "modulo.h"
 #include "sessao.h"
@@ -95,5 +96,7 @@ void obs_module_unload(void)
 	// Sessoes que ainda estao fechando em segundo plano usam o registro: espera (com limite) antes de soltar.
 	if (!fmcam::aguardarEncerramentos(3000))
 		blog(LOG_WARNING, "[fmcam] %d sessao(oes) ainda encerrando ao descarregar", fmcam::sessoesEncerrando());
+	if (!fmappcam::aguardarThreadsSoltas(1000))
+		blog(LOG_WARNING, "[fmcam] threads de conexao ainda terminando ao descarregar");
 	fmcam::g_registro.reset();
 }

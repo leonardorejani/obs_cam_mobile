@@ -35,7 +35,9 @@ Sem janela (ctest): `ctest --test-dir build --output-on-failure`. Os testes `obs
 6. **NO AR (tally)**: quando a cena com a fonte vai para o Programa, o iPhone mostra a borda vermelha. Em modo estúdio só o Programa conta, a Prévia não.
 7. **Wi-Fi**: iPhone e PC na mesma rede, app aberto. O iPhone aparece na lista com "(Wi-Fi)" depois dos do cabo. Na primeira vez o macOS pergunta se o OBS pode usar a **Rede local**, e precisa permitir (Ajustes do Sistema, Privacidade e Segurança, Rede local, OBS). Se o iPhone já está no cabo, só o do cabo aparece. Reserva: marcar "Usar Wi-Fi em vez do cabo" e digitar o IP que o app mostra na tela.
 8. Se um item antigo da fonte ficou pequeno no canto depois de trocar a predefinição, clicar no item e apertar **Cmd+F** (ajustar à tela). Itens novos e os que enchiam a tela já se ajustam sozinhos.
-9. Tirar o cabo: a fonte segura o último quadro e volta sozinha quando o iPhone voltar.
+9. Tirar o cabo: a fonte segura o último quadro e volta sozinha quando o iPhone voltar (ou mostra tela preta ou uma imagem, em **Quando o iPhone cair**).
+10. 1.0.3: propriedades com status ao vivo, **Modo de recepção**, **Quando o iPhone cair**, **Decodificação** e **Encaixar na tela sozinho**. Painel com controle remoto (lente, EV, travas, qualidade) e **Testar**. Passo a passo em `docs/GUIA-OPERADOR.md`.
+11. 1.0.4: só correções (varredura 2, `docs/varreduras/varredura-2.md`).
 
 ## O que muda no Windows
 
@@ -50,6 +52,10 @@ Sem janela (ctest): `ctest --test-dir build --output-on-failure`. Os testes `obs
 ## Variáveis para diagnóstico e teste
 
 `FMCAM_USBMUXD` (caminho do usbmuxd), `FMCAM_BONJOUR` (`off` desliga, `local` só anúncios da própria máquina), `FMCAM_CANVAS` (`1920x1080`, só para teste sem vídeo). Sem elas o plugin se comporta normalmente.
+
+## Medir o atraso no OBS (sem janela)
+
+`build-final/obs-plugin/medir_obs <fmcam-extension.plugin> <UDID> <predefinicao|iphone> <segundos> [LxA do canvas] [kbps] [estavel] [hw|sw]` inicia um libobs de verdade com vídeo (OpenGL fora da tela), cria a fonte apontada para o iPhone do cabo e mede o atraso da captura até o quadro entregue ao OBS e até o canvas desenhado. Com `FMCAM_COMANDOS='{"cmd":"lente","fator":5}|...'` manda comandos de controle remoto (proc `fmcam_comando` da fonte) e mostra o estado depois de cada um. Precisa do iPhone livre (OBS fechado ou sem fonte nele).
 
 ## Estrutura
 

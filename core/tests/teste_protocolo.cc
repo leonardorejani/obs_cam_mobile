@@ -502,3 +502,13 @@ TESTE(sincronia_sem_estouro_com_entrada_hostil) {
   n.registrar(1000000, 1006000, 5000000 + 1003000);
   CHECAR_IGUAIS(n.diferenca(), int64_t(5000000));
 }
+
+// Varredura 1: o pedido com 2160p30 ou 1080p120 (que a extensao oferece) virava 1080p30 no lado que le o handshake
+// (iphone-falso e testes), entao o caminho 4K nunca era exercitado ponta a ponta.
+TESTE(handshake_aceita_todos_os_presets_da_extensao) {
+  for (const char* pr : {"720p30", "720p60", "1080p30", "1080p60", "1080p120", "2160p30"}) {
+    PedidoHandshake p;
+    CHECAR_IGUAIS(lerPedidoHandshake(std::string("{\"v\":1,\"preset\":\"") + pr + "\"}", p), ErroHandshake::Nenhum);
+    CHECAR_IGUAIS(p.preset, std::string(pr));
+  }
+}

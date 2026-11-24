@@ -52,10 +52,28 @@ enum ModoCamera: Equatable {
     case fisica(motivo: String)
 
     /// O virtual só vale se tem o formato pedido e, quando a estabilização está ligada, se esse formato aceita estabilização.
-    static func escolher(virtualExiste: Bool, virtualTemFormato: Bool, estabilizar: Bool, virtualEstabiliza: Bool) -> ModoCamera {
+    static func escolher(virtualExiste: Bool, virtualTemFormato: Bool, estabilizar: Bool, virtualEstabiliza: Bool,
+                         virtualServeAoManual: Bool = true) -> ModoCamera {
         if !virtualExiste { return .fisica(motivo: "sem dispositivo virtual") }
+        if !virtualServeAoManual { return .fisica(motivo: "foco manual ou balanço de branco em K não existem no dispositivo virtual") }
         if !virtualTemFormato { return .fisica(motivo: "formato não existe no dispositivo virtual") }
         if estabilizar && !virtualEstabiliza { return .fisica(motivo: "estabilização não existe nesse formato do dispositivo virtual") }
         return .virtual
+    }
+}
+
+/// Foco manual (posição da lente) e balanço de branco em temperatura (ganhos custom) são recursos do dispositivo: o
+/// virtual do iPhone (tripla, dupla) não tem nenhum dos dois (medido no 15 Pro Max, iOS 27: isLockingFocusWithCustomLensPosition
+/// e isLockingWhiteBalanceWithCustomDeviceGains são false). Quem pede isso usa a câmera física da lente.
+enum ControleManual {
+    static func precisa(focoManual: Bool, brancoEmK: Bool) -> Bool { focoManual || brancoEmK }
+
+    static func precisa(_ a: AjustesCamera) -> Bool {
+        precisa(focoManual: a.focoModo == .manual, brancoEmK: a.brancoTravado && a.kelvin != nil)
+    }
+
+    /// O dispositivo (virtual) serve ao que foi pedido?
+    static func dispositivoServe(focoManual: Bool, brancoEmK: Bool, suportaLenteCustom: Bool, suportaGanhosCustom: Bool) -> Bool {
+        (!focoManual || suportaLenteCustom) && (!brancoEmK || suportaGanhosCustom)
     }
 }

@@ -1,6 +1,7 @@
 #include "config_fonte.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include "usbmux.h"
@@ -21,9 +22,34 @@ bool infoPredefinicao(const std::string& p, PredefinicaoInfo& r) {
 }
 bool lenteValida(const std::string& l) { return l.empty() || l == "wide" || l == "ultra" || l == "tele"; }
 
+bool entregaMenorQuePedido(const std::string& preset, int largura, int altura, double fps) {
+  PredefinicaoInfo pedido;
+  if (!infoPredefinicao(preset, pedido) || largura <= 0 || altura <= 0) return false;
+  return std::min(largura, altura) != pedido.altura || std::abs(pedido.fps - fps) > 0.5;
+}
+
+bool aplicarQuedaAgora(const std::string& antes, const std::string& depois, bool conectado, bool jaTeveQuadro) {
+  return !conectado && jaTeveQuadro && antes != depois && (depois == "preta" || depois == "imagem");
+}
+
+std::vector<int64_t> opcoesDeBitrate(int64_t emUso) {
+  std::vector<int64_t> v = {6000000, 10000000, 15000000, 20000000, 30000000};
+  if (emUso > 0 && std::find(v.begin(), v.end(), emUso) == v.end()) v.insert(std::upper_bound(v.begin(), v.end(), emUso), emUso);
+  return v;
+}
+
+const char* chaveTextoQueda(const std::string& aoCair) {
+  if (aoCair == "preta") return "Estado.MostrandoPreta";
+  if (aoCair == "imagem") return "Estado.MostrandoImagem";
+  return "Estado.SegurandoQuadro";
+}
+
 ConfigFonte normalizar(ConfigFonte c) {
   if (!presetValido(c.preset)) c.preset.clear();
   if (!lenteValida(c.lente)) c.lente.clear();
+  if (c.recepcao != "estavel") c.recepcao.clear();
+  if (c.aoCair != "preta" && c.aoCair != "imagem") c.aoCair.clear();
+  if (c.decodificacao != "hw" && c.decodificacao != "sw") c.decodificacao.clear();
   c.bitrateKbps = c.bitrateKbps <= 0 ? 0 : std::clamp(c.bitrateKbps, 1000, 50000);
   auto corta = [](std::string& s) {
     while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\n')) s.pop_back();
@@ -40,8 +66,11 @@ ConfigFonte normalizar(ConfigFonte c) {
   return c;
 }
 
+int modoHardware(const std::string& d) { return d == "hw" ? 1 : d == "sw" ? 0 : -1; }
+
 ResultadoMigracao migrarValores(ValoresSalvos& v) {
   ResultadoMigracao r;
+  if (v.versao < 4 && v.existente && !v.temEncaixar) r.encaixarDesligado = true;
   if (v.versao < 2 && v.temLente && v.lente == "wide") {
     v.lente.clear();
     r.lente = true;
@@ -62,7 +91,8 @@ ResultadoMigracao migrarValores(ValoresSalvos& v) {
 
 bool mudouConexao(const ConfigFonte& a, const ConfigFonte& b) {
   return a.udid != b.udid || a.preset != b.preset || a.lente != b.lente || a.bitrateKbps != b.bitrateKbps ||
-         a.wifi != b.wifi || a.wifiId != b.wifiId || (a.wifi && a.wifiIp != b.wifiIp);
+         a.wifi != b.wifi || a.wifiId != b.wifiId || (a.wifi && a.wifiIp != b.wifiIp) ||
+         a.decodificacao != b.decodificacao || a.recepcao != b.recepcao;
 }
 
 std::string caminhoUsbmuxConfigurado() {

@@ -8,16 +8,20 @@
 
 /* Begin PBXBuildFile section */
 		07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBAEB9013862236B5A0833C /* ServidorTests.swift */; };
+		09698D531990A9C63404C1B4 /* LimitesDeCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73BC7180CDB6EB768E63712 /* LimitesDeCameraTests.swift */; };
 		0B66CD9981A2EA2230C9C8DD /* Tela.swift in Sources */ = {isa = PBXBuildFile; fileRef = A284DB0EB7667CCA2B6D5653 /* Tela.swift */; };
 		1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39E7EF3D2A5A1030227D271 /* Rede.swift */; };
+		220F2CC3B84E5E8E49A7ED7F /* LimitesDeCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DAAC030FD341A540F3FCC5 /* LimitesDeCamera.swift */; };
 		28F46B0A5F589A782B0D6659 /* ZoomTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FA0249DBCDF844A074329C /* ZoomTests.swift */; };
 		2C263E3DA05FD37A32874F9C /* FocoTestsCena.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */; };
 		304E027475678F9DA466CCED /* Codificador.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB92C044A569ACCACF1CAD76 /* Codificador.swift */; };
 		40ADDA3BD5F9D3E9EBAC7E79 /* Nivel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B028AEC3D81C0C9DEE333A07 /* Nivel.swift */; };
+		494C68AFD1C07C2964AE6251 /* Varredura2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58A9486BCC451915A8586EE0 /* Varredura2Tests.swift */; };
 		5BB595A3594D5D91A083E513 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 439593434EDE25BC619EB9AA /* Assets.xcassets */; };
 		62220B2BCEF229BF4CEBA0B9 /* QualidadeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385659F9A9C1D145E033907F /* QualidadeTests.swift */; };
 		65A67C9F475CBE7BBE7F93F2 /* CodificadorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A18269CD5884510D562316 /* CodificadorTests.swift */; };
 		70B103C590DC18F0EB93D615 /* DiasParaVencer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */; };
+		740948C0650E9811AE1C7758 /* VarreduraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98DB0D93858FF799BF9129F6 /* VarreduraTests.swift */; };
 		7A59B6781DC46BDB6D776E60 /* Assinatura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F71342E42F05D96F9EA1F66 /* Assinatura.swift */; };
 		7A953A89262C817718A81945 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF411A1ABCB64F79EA2C50 /* App.swift */; };
 		80EF6722C8EF5FD15A306008 /* CicloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B714FB3E2C8F5EDC41982287 /* CicloTests.swift */; };
@@ -30,8 +34,12 @@
 		B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01EEFF212AE9821838E695 /* RobustezTests.swift */; };
 		B4260BC44A6B248A826CA59E /* Protocolo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */; };
 		BB502A7A758A5BFDC6BEFD3A /* Zoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2C71D059D918D64FCB4EAC /* Zoom.swift */; };
+		C48FC77237A96B453A2FDDED /* Orientacao.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9915EA6839BE9DE1688582F6 /* Orientacao.swift */; };
+		D133F0BF51D6DB7C5C487538 /* Depuracao.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5736CF2E20389CD383F9BA85 /* Depuracao.swift */; };
 		E7857DED2B04D6F2CF238AB4 /* Servidor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E74AF1371EA7D49A5B73C56 /* Servidor.swift */; };
+		E9B242C88EA8918CE30EFAF7 /* OrientacaoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39244F6BFCDE8F3BB758B2A /* OrientacaoTests.swift */; };
 		ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */; };
+		F5C6C7618CD30E93CA6A0349 /* ControleRemotoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC7C1E77964DBA907359AA5 /* ControleRemotoTests.swift */; };
 		F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -55,16 +63,23 @@
 		3E275455C86C09007A24FE7B /* NomeCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NomeCameraTests.swift; sourceTree = "<group>"; };
 		3F71342E42F05D96F9EA1F66 /* Assinatura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assinatura.swift; sourceTree = "<group>"; };
 		439593434EDE25BC619EB9AA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5736CF2E20389CD383F9BA85 /* Depuracao.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Depuracao.swift; sourceTree = "<group>"; };
+		58A9486BCC451915A8586EE0 /* Varredura2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Varredura2Tests.swift; sourceTree = "<group>"; };
 		652E88463C6B08966DEE6C63 /* RecursosTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecursosTests.swift; sourceTree = "<group>"; };
 		7E74AF1371EA7D49A5B73C56 /* Servidor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Servidor.swift; sourceTree = "<group>"; };
 		827CD114D1FDC00D88C5D9F2 /* FMCamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FMCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8FEB3328B9DA5729D6889ACF /* Preferencias.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferencias.swift; sourceTree = "<group>"; };
 		910BC902D9BF7F5D8299C44D /* FMCam.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FMCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		98DB0D93858FF799BF9129F6 /* VarreduraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VarreduraTests.swift; sourceTree = "<group>"; };
+		9915EA6839BE9DE1688582F6 /* Orientacao.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Orientacao.swift; sourceTree = "<group>"; };
 		9B2C71D059D918D64FCB4EAC /* Zoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zoom.swift; sourceTree = "<group>"; };
 		A284DB0EB7667CCA2B6D5653 /* Tela.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tela.swift; sourceTree = "<group>"; };
+		A3DAAC030FD341A540F3FCC5 /* LimitesDeCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitesDeCamera.swift; sourceTree = "<group>"; };
 		AFBAEB9013862236B5A0833C /* ServidorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServidorTests.swift; sourceTree = "<group>"; };
 		B028AEC3D81C0C9DEE333A07 /* Nivel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Nivel.swift; sourceTree = "<group>"; };
+		B39244F6BFCDE8F3BB758B2A /* OrientacaoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientacaoTests.swift; sourceTree = "<group>"; };
 		B714FB3E2C8F5EDC41982287 /* CicloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CicloTests.swift; sourceTree = "<group>"; };
+		B73BC7180CDB6EB768E63712 /* LimitesDeCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitesDeCameraTests.swift; sourceTree = "<group>"; };
 		BF01EEFF212AE9821838E695 /* RobustezTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RobustezTests.swift; sourceTree = "<group>"; };
 		CB0F60DDD047A249EB8E556E /* Captura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Captura.swift; sourceTree = "<group>"; };
 		CB92C044A569ACCACF1CAD76 /* Codificador.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codificador.swift; sourceTree = "<group>"; };
@@ -72,6 +87,7 @@
 		DDFF411A1ABCB64F79EA2C50 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		E39E7EF3D2A5A1030227D271 /* Rede.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rede.swift; sourceTree = "<group>"; };
 		E7A18269CD5884510D562316 /* CodificadorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodificadorTests.swift; sourceTree = "<group>"; };
+		EAC7C1E77964DBA907359AA5 /* ControleRemotoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControleRemotoTests.swift; sourceTree = "<group>"; };
 		EC2BD723A01FADB2F7570812 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocoTestsCena.swift; sourceTree = "<group>"; };
 		FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocolo.swift; sourceTree = "<group>"; };
@@ -83,14 +99,19 @@
 			children = (
 				B714FB3E2C8F5EDC41982287 /* CicloTests.swift */,
 				E7A18269CD5884510D562316 /* CodificadorTests.swift */,
+				EAC7C1E77964DBA907359AA5 /* ControleRemotoTests.swift */,
 				F6AC4427E4C01667E2BFEB4B /* FocoTestsCena.swift */,
+				B73BC7180CDB6EB768E63712 /* LimitesDeCameraTests.swift */,
 				3E275455C86C09007A24FE7B /* NomeCameraTests.swift */,
+				B39244F6BFCDE8F3BB758B2A /* OrientacaoTests.swift */,
 				0632F7AEA7AD756BC7E19D05 /* ProtocoloTests.swift */,
 				385659F9A9C1D145E033907F /* QualidadeTests.swift */,
 				652E88463C6B08966DEE6C63 /* RecursosTests.swift */,
 				BF01EEFF212AE9821838E695 /* RobustezTests.swift */,
 				AFBAEB9013862236B5A0833C /* ServidorTests.swift */,
 				CE5079C02AB4DC1D0E48A2A6 /* TelaLogicaTests.swift */,
+				58A9486BCC451915A8586EE0 /* Varredura2Tests.swift */,
+				98DB0D93858FF799BF9129F6 /* VarreduraTests.swift */,
 				18FA0249DBCDF844A074329C /* ZoomTests.swift */,
 			);
 			path = FMCamTests;
@@ -124,9 +145,12 @@
 				CB0F60DDD047A249EB8E556E /* Captura.swift */,
 				255D03ED05585575E716487C /* Ciclo.swift */,
 				CB92C044A569ACCACF1CAD76 /* Codificador.swift */,
+				5736CF2E20389CD383F9BA85 /* Depuracao.swift */,
 				195FA4D636B8CC2E6F48C5C3 /* DiasParaVencer.swift */,
 				EC2BD723A01FADB2F7570812 /* Info.plist */,
+				A3DAAC030FD341A540F3FCC5 /* LimitesDeCamera.swift */,
 				B028AEC3D81C0C9DEE333A07 /* Nivel.swift */,
+				9915EA6839BE9DE1688582F6 /* Orientacao.swift */,
 				8FEB3328B9DA5729D6889ACF /* Preferencias.swift */,
 				FAA7CEF0C0E7660910BD5464 /* Protocolo.swift */,
 				E39E7EF3D2A5A1030227D271 /* Rede.swift */,
@@ -232,8 +256,11 @@
 				956FBEA6CA7650BC3EBD5FBB /* Captura.swift in Sources */,
 				94E0D15D921D9254ACC4FA32 /* Ciclo.swift in Sources */,
 				304E027475678F9DA466CCED /* Codificador.swift in Sources */,
+				D133F0BF51D6DB7C5C487538 /* Depuracao.swift in Sources */,
 				70B103C590DC18F0EB93D615 /* DiasParaVencer.swift in Sources */,
+				220F2CC3B84E5E8E49A7ED7F /* LimitesDeCamera.swift in Sources */,
 				40ADDA3BD5F9D3E9EBAC7E79 /* Nivel.swift in Sources */,
+				C48FC77237A96B453A2FDDED /* Orientacao.swift in Sources */,
 				873D40C1D6F86EEC59A5DE60 /* Preferencias.swift in Sources */,
 				B4260BC44A6B248A826CA59E /* Protocolo.swift in Sources */,
 				1CA0F9D0F09C7FF9C5EDDD1A /* Rede.swift in Sources */,
@@ -249,14 +276,19 @@
 			files = (
 				80EF6722C8EF5FD15A306008 /* CicloTests.swift in Sources */,
 				65A67C9F475CBE7BBE7F93F2 /* CodificadorTests.swift in Sources */,
+				F5C6C7618CD30E93CA6A0349 /* ControleRemotoTests.swift in Sources */,
 				2C263E3DA05FD37A32874F9C /* FocoTestsCena.swift in Sources */,
+				09698D531990A9C63404C1B4 /* LimitesDeCameraTests.swift in Sources */,
 				92A45C34754A8A67CD2C5557 /* NomeCameraTests.swift in Sources */,
+				E9B242C88EA8918CE30EFAF7 /* OrientacaoTests.swift in Sources */,
 				F5F032DB435EB3B4841DC080 /* ProtocoloTests.swift in Sources */,
 				62220B2BCEF229BF4CEBA0B9 /* QualidadeTests.swift in Sources */,
 				9F8D0FDA656BF187F8263433 /* RecursosTests.swift in Sources */,
 				B18EBADC67ECB3E98DAB934E /* RobustezTests.swift in Sources */,
 				07DE7E79E73DA04695F6B471 /* ServidorTests.swift in Sources */,
 				ED150FE7F53F4CA8BB6A4EF1 /* TelaLogicaTests.swift in Sources */,
+				494C68AFD1C07C2964AE6251 /* Varredura2Tests.swift in Sources */,
+				740948C0650E9811AE1C7758 /* VarreduraTests.swift in Sources */,
 				28F46B0A5F589A782B0D6659 /* ZoomTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -306,7 +338,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -325,7 +357,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -439,7 +471,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -452,7 +484,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

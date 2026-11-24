@@ -49,9 +49,19 @@ if(APPLE)
   if(NOT EXISTS "${OBS_FW}/libobs.framework/Versions/A/libobs")
     message(FATAL_ERROR "OBS nao encontrado em ${FMCAM_OBS_APP}")
   endif()
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(FFH REQUIRED libavcodec libavutil)  # so os headers: a lib de execucao e a do OBS
-  set(FF_INC ${FFH_INCLUDE_DIRS})
+  # Headers do FFmpeg: TEM que ser da mesma versao maior que o OBS carrega (o modulo recusa carregar se for outra, ver
+  # modulo.cc). O Homebrew anda sozinho para o FFmpeg seguinte (63 contra os 62 do OBS 33), entao o padrao sao os
+  # headers do obs-deps do proprio OBS, que ja ficam em deps/. A lib de execucao e sempre a do OBS.
+  set(FF_DEPS_INC "${CMAKE_CURRENT_SOURCE_DIR}/deps/win/obs-deps/include")
+  if(FMCAM_FFMPEG_INCLUDE_DIR)
+    set(FF_INC "${FMCAM_FFMPEG_INCLUDE_DIR}")
+  elseif(EXISTS "${FF_DEPS_INC}/libavcodec/version_major.h")
+    set(FF_INC "${FF_DEPS_INC}")
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFH REQUIRED libavcodec libavutil)
+    set(FF_INC ${FFH_INCLUDE_DIRS})
+  endif()
   set(FF_LIBS "${OBS_FW}/libavcodec.dylib" "${OBS_FW}/libavutil.dylib")
   set(OBS_LIBS "${OBS_FW}/libobs.framework/Versions/A/libobs")
   set(OBS_FRONTEND_LIBS "${OBS_FW}/obs-frontend-api.dylib")
@@ -194,6 +204,11 @@ if(APPLE)
     set_target_properties(${t} PROPERTIES BUILD_RPATH "${OBS_FW}")
   endforeach()
   target_link_libraries(teste_carga_modulo PRIVATE ${OBS_LIBS})
+  # medir_obs: ferramenta (nao e teste do ctest, precisa de iPhone de verdade) que mede o atraso ate o canvas do libobs
+  add_executable(medir_obs tests/medir_obs.cc)
+  target_include_directories(medir_obs PRIVATE ${OBS_INCLUDES})
+  target_link_libraries(medir_obs PRIVATE ${OBS_LIBS} Threads::Threads)
+  set_target_properties(medir_obs PROPERTIES BUILD_RPATH "${OBS_FW}")
 
   set(PLUGIN_INSTALADO "$ENV{HOME}/Library/Application Support/obs-studio/plugins/fmcam-extension.plugin")
   add_test(NAME obs_carga_modulo COMMAND teste_carga_modulo "${PLUGIN_INSTALADO}")
@@ -203,9 +218,15 @@ if(APPLE)
     COMMAND sh ${CMAKE_SOURCE_DIR}/tools/amostra/gerar.sh ${AMOSTRA720} 8 1280x720
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/amostra/gerar.sh COMMENT "Gerando amostra H.264 720p30")
   add_custom_target(amostra720 ALL DEPENDS ${AMOSTRA720})
-  add_dependencies(teste_logica_fonte amostra720)
-  set_property(TEST obs_logica_fonte APPEND PROPERTY ENVIRONMENT "FMCAM_AMOSTRA720=${AMOSTRA720}")
+  # amostra em pe (1080x1920): o iPhone girado de paisagem para retrato no meio da conexao
+  set(AMOSTRAVERT ${CMAKE_BINARY_DIR}/amostra_vertical.h264)
+  add_custom_command(OUTPUT ${AMOSTRAVERT}
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/amostra/gerar.sh ${AMOSTRAVERT} 8 1080x1920
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/amostra/gerar.sh COMMENT "Gerando amostra H.264 em pe 1080x1920")
+  add_custom_target(amostra_vertical ALL DEPENDS ${AMOSTRAVERT})
+  add_dependencies(teste_logica_fonte amostra720 amostra_vertical)
+  set_property(TEST obs_logica_fonte APPEND PROPERTY ENVIRONMENT "FMCAM_AMOSTRA720=${AMOSTRA720};FMCAM_AMOSTRAVERT=${AMOSTRAVERT}")
   add_test(NAME obs_headless COMMAND teste_headless_obs "${PLUGIN_INSTALADO}"
-           $<TARGET_FILE:iphone-falso> ${CMAKE_BINARY_DIR}/amostra.h264 ${AMOSTRA720})
+           $<TARGET_FILE:iphone-falso> ${CMAKE_BINARY_DIR}/amostra.h264 ${AMOSTRA720} ${AMOSTRAVERT})
   set_tests_properties(obs_headless PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
 endif()

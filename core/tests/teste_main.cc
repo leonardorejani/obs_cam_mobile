@@ -15,9 +15,14 @@ void falhar(const char* arq, int linha, const std::string& msg) {
 }
 }  // namespace teste
 
-int main() {
+int main(int argc, char** argv) {
+  // Argumento opcional: roda so os testes cujo nome contem o texto (ex.: ./teste_logica_fonte duas_fontes).
+  const std::string filtro = argc > 1 ? argv[1] : "";
   int ruins = 0;
+  size_t rodados = 0;
   for (auto& c : teste::casos()) {
+    if (!filtro.empty() && c.nome.find(filtro) == std::string::npos) continue;
+    ++rodados;
     int antes = teste::falhas();
     std::cout << "[ RODANDO ] " << c.nome << std::endl;
     c.fn();
@@ -25,6 +30,6 @@ int main() {
     if (!ok) ++ruins;
     std::cout << (ok ? "[   OK    ] " : "[ FALHOU  ] ") << c.nome << std::endl;
   }
-  std::cout << teste::casos().size() - static_cast<size_t>(ruins) << "/" << teste::casos().size() << " testes ok\n";
+  std::cout << rodados - static_cast<size_t>(ruins) << "/" << rodados << " testes ok\n";
   return ruins ? 1 : 0;
 }

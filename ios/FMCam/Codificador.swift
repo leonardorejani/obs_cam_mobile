@@ -80,9 +80,19 @@ final class Codificador {
         ajustar(kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: fps * 2))
         ajustar(kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: fps))
         ajustar(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel)
+        if Codificador.ehGrande(largura: largura, altura: altura) {
+            // Acima de 1080p cada quadro leva mais para codificar e o codificador aceita segurar quadros para trabalhar
+            // melhor. Tempo real: nenhum quadro de espera, e velocidade antes de qualidade de compressão.
+            // Propriedade que o aparelho não conhece só devolve erro (VTSessionSetProperty), não derruba a criação.
+            ajustar(kVTCompressionPropertyKey_MaxFrameDelayCount, NSNumber(value: 0))
+            ajustar(kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, kCFBooleanTrue)
+        }
         VTCompressionSessionPrepareToEncodeFrames(s)
         sessao = s
     }
+
+    /// Maior que 1080p (o 4K): único tamanho que ganha o ajuste de baixa latência acima.
+    static func ehGrande(largura: Int, altura: Int) -> Bool { largura * altura > 1920 * 1080 }
 
     /// Troca de lente: reenvia SPS/PPS (tipo 1) antes do próximo quadro, que sai como chave.
     func recomecarConfigEChave() {
@@ -113,6 +123,11 @@ final class Codificador {
         forcarChave = false
         trava.unlock()
         guard let s else { return }
+        // Quadro que ainda saiu da câmera no tamanho de antes de um giro: o codificador é de outro tamanho, descarta.
+        guard CVPixelBufferGetWidth(pixelBuffer) == largura, CVPixelBufferGetHeight(pixelBuffer) == altura else {
+            trava.lock(); forcarChave = forcarChave || forcar; trava.unlock()
+            return
+        }
         let props: CFDictionary? = forcar ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary : nil
         let st = VTCompressionSessionEncodeFrame(
             s, imageBuffer: pixelBuffer, presentationTimeStamp: pts, duration: duracao,

@@ -25,7 +25,7 @@ O cliente conecta e manda **uma linha JSON** em UTF-8 terminada em `\n`, com no 
 | `cliente` | não | nome e versão de quem conecta, para log |
 | `preset` | não | `1080p30`, `1080p60`, `1080p120`, `2160p30`, `720p30`, `720p60`. **Ausente = usar a qualidade salva no iPhone** (o operador pode ter escolhido na tela do app). **Presente = vale o do cliente nesta conexão.** Se o aparelho não tiver o formato, o iPhone cai para o mais próximo abaixo e diz o que ficou em `w`, `h` e `fps` da resposta |
 | `lente` | não | `wide`, `ultra`, `tele`. **Ausente = manter a lente que está escolhida no iPhone** (o operador pode ter trocado na tela do app). O cliente só manda quando alguém escolheu a lente de propósito |
-| `bitrate` | não | bits por segundo. Faixa aceita: 1000000 a 50000000. **Ausente = usar o bitrate salvo no iPhone. Presente = vale o do cliente nesta conexão.** Se o cliente mandar só o `preset`, o bitrate é o padrão daquele preset |
+| `bitrate` | não | bits por segundo. Faixa aceita: 1000000 a 50000000. **Ausente = usar o bitrate salvo no iPhone. Presente = vale o do cliente nesta conexão.** Se o cliente mandar só o `preset`, vale o bitrate salvo no iPhone (cada campo é resolvido sozinho) |
 
 O iPhone responde com **uma linha JSON** terminada em `\n`:
 
@@ -47,6 +47,8 @@ Se não aceitar, responde e fecha a conexão:
 | `ocupado` | já tem cliente conectado | "iPhone em uso por outro computador" |
 | `handshake` | linha inválida, JSON quebrado, maior que 4096 bytes ou sem `\n` em 3 segundos | "Falha de conexão" |
 | `camera` | câmera indisponível (permissão negada, outro app usando) | "Câmera do iPhone indisponível" |
+
+Na resposta `ocupado` o iPhone acrescenta o campo opcional `id` (o mesmo da resposta ok). Com ele a extensão descobre que quem segura a vaga é outra fonte do próprio processo e espera quieta, sem bater na porta. App antigo não manda e o cliente só recua (1, 2, 4 s, teto 4 s entre tentativas).
 
 Regras do texto (valem para as duas linhas do handshake e para o JSON dos tipos 3 e 4):
 
@@ -91,6 +93,8 @@ Regras do vídeo:
 - O primeiro quadro depois do handshake é quadro-chave.
 - Quadro-chave pelo menos a cada 2 segundos, para o cliente se recuperar de perda sem pedir.
 
+Orientação (23/11/2026): o vídeo segue a posição física do iPhone, nas duas paisagens (1920x1080, uma delas girada 180 graus) e em pé (1080x1920, idem as outras resoluções transpostas). `w` e `h` do handshake já saem no tamanho da posição de agora. Girar com a conexão aberta usa o mesmo caminho da troca de qualidade: tipo 1 novo com o SPS do tamanho novo, quadro seguinte é quadro-chave, `w` e `h` novos no próximo status. O cliente recria o decodificador e ajusta o tamanho da fonte ao tamanho do quadro. Nada derruba a conexão.
+
 Status (tipo 3), a cada 2 segundos:
 
 ```json
@@ -117,6 +121,13 @@ Campos de câmera no mesmo status (todos opcionais, quem lê ignora o que não c
 | `qualidade_obs` | bool | `true` quando o cliente fixou `preset` ou `bitrate` nesta conexão (a qualidade em uso veio dele), `false` quando vale a qualidade salva no iPhone. Ausente em iPhone antigo, e o cliente trata como `false` |
 | `preset_obs`, `bitrate_obs` | bool | qual dos dois o cliente fixou (`qualidade_obs` é um ou o outro). Ausentes = `false`. O cliente marca "(OBS)" só no item fixado |
 | `assinatura_vence` | texto | data ISO 8601 em que a assinatura do app instalado vence (só aparece se o aparelho tem o perfil) |
+| `lentes` | lista de números | botões de lente que o aparelho oferece agora, ex.: `[0.5,1,2,5]` (app 1.0.3+) |
+| `fator` | número | botão de lente em uso (um dos de `lentes`). Ausente se nenhum está aceso |
+| `ev_min`, `ev_max` | número | faixa do EV que vale agora (a da tela cortada pela do aparelho) |
+| `preset` | texto | formato em uso nesta conexão, ex.: `2160p30` |
+| `trava_ae`, `trava_af`, `trava_bb` | bool | os três botões de trava do trilho, como a tela do iPhone mostra |
+
+Os campos de `lentes` a `trava_bb` vêm do app 1.0.3 em diante. Sem eles, a extensão não mostra os controles remotos daquele iPhone (app antigo) e pede para atualizar o app.
 
 Troca de qualidade feita no iPhone durante a conexão: quando o operador muda a qualidade na tela do app, o iPhone reconfigura o codificador **sem derrubar a conexão**. A ordem é: tipo 1 novo com o SPS e PPS do formato novo, o quadro seguinte é quadro-chave, e os campos `w`, `h`, `fps_alvo` e `bitrate` novos chegam no status do ciclo normal (a cada 2 segundos, não há status imediato na troca). O cliente reage ao tipo 1 novo (recria o decodificador e ajusta o que mostra ao tamanho do quadro) e ao status quando ele chegar. A trava é por campo: o que o cliente fixou no handshake (`preset_obs` ou `bitrate_obs` = `true`) o iPhone **não troca nessa conexão** e o painel do app mostra o valor do OBS desabilitado. O campo que o cliente não mandou continua livre no iPhone e pode mudar no meio da conexão.
 
@@ -136,7 +147,28 @@ Comandos da v1:
 
 `noar` é o tally: a extensão manda `true` quando a cena com aquela fonte vai para o Programa do OBS e `false` quando sai. O iPhone mostra uma borda vermelha "NO AR" e não mexe no vídeo.
 
-Pede um quadro-chave imediato (o cliente usa quando o decodificador perdeu a referência). Comando desconhecido, e campo desconhecido num comando conhecido, são ignorados. Lente, travas e "no ar" entram no M2 como comandos novos neste mesmo tipo.
+`keyframe` pede um quadro-chave imediato (o cliente usa quando o decodificador perdeu a referência). Comando desconhecido, e campo desconhecido num comando conhecido, são ignorados.
+
+Controle remoto (app 1.0.3 e extensão 1.0.3, painel OBS Cam Mobile). Cada comando faz exatamente o que o toque equivalente na tela do iPhone faz (mesma persistência, mesma rampa de zoom) e a tela do iPhone mostra na hora:
+
+```json
+{"cmd":"lente","fator":2}
+{"cmd":"ev","valor":-0.7}
+{"cmd":"trava_ae","valor":true}
+{"cmd":"trava_af","valor":true}
+{"cmd":"trava_bb","valor":true}
+{"cmd":"qualidade","preset":"2160p30","bitrate":25000000}
+```
+
+| Comando | Igual a | Regras |
+|---|---|---|
+| `lente` | tocar o botão de lente com esse rótulo | `fator` fora de `lentes` é ignorado |
+| `ev` | mexer no EV | limitado a `ev_min`..`ev_max`. Ignorado em exposição manual (o controle não existe na tela nesse modo) |
+| `trava_ae`, `trava_af` | botões Trava AE e Trava AF do trilho | `valor` true liga, false desliga |
+| `trava_bb` | botão de trava do balanço de branco | trava no valor de agora |
+| `qualidade` | mudar em Ajustes > Qualidade (qualidade salva no iPhone) | `preset` e `bitrate` opcionais. Campo que o cliente fixou no handshake desta conexão (`preset_obs`, `bitrate_obs`) é ignorado. Preset que a lente não tem cai no mais próximo abaixo. `bitrate` de 1000000 a 50000000 |
+
+Valor inválido num campo é ignorado (só aquele campo). Depois de aplicar qualquer um desses comandos o iPhone manda um status (tipo 3) na hora, além do ciclo de 2 s, e outro quando uma troca de qualidade termina. `keyframe` e `noar` não geram status imediato. App antigo ignora os comandos novos (comando desconhecido).
 
 ## 3. Relógio e atraso
 
@@ -158,7 +190,7 @@ O cliente fica com a `diferenca` do ping de menor `ida_e_volta` nos últimos 10 
 atraso = chegada_no_cliente - (tempo_do_quadro - diferenca)
 ```
 
-Isso mede captura até chegada (codificação + transporte). A decodificação o cliente soma por conta própria. O atraso vidro a vidro (o que vale) se mede com cronômetro, ver `PLANO.md`.
+Isso mede captura até chegada (codificação + transporte). A decodificação o cliente soma por conta própria: a extensão 1.0.3 mede com a mesma conta no instante em que entrega o quadro decodificado ao OBS ("Atraso do iPhone até o OBS" nas propriedades da fonte e no painel, p50 e p95 dos últimos 3 s). O atraso vidro a vidro (o que vale) se mede com cronômetro, ver `PLANO.md`.
 
 ## 4. Vida da conexão
 
@@ -187,3 +219,5 @@ Nota para quem implementa o cliente. Não faz parte do que trafega na porta 4848
 |---|---|---|
 | 1 | 18/11/2026 | Primeira versão |
 | 1 | 18/11/2026 | Sem mudar o número da versão (só campos opcionais): `preset` e `bitrate` ausentes no handshake = qualidade salva no iPhone. Status ganha `bitrate` e `qualidade_obs`. Troca de qualidade pelo iPhone no meio da conexão |
+| 1 | 23/11/2026 | Sem mudar o número da versão: recusa `ocupado` leva `id` opcional. Vídeo em pé (largura menor que altura) e troca de orientação no meio da conexão, pelo mesmo caminho da troca de qualidade |
+| 1 | 24/11/2026 | Sem mudar o número da versão (app e extensão 1.0.3): comandos de controle remoto `lente`, `ev`, `trava_ae`, `trava_af`, `trava_bb` e `qualidade`, status imediato depois deles, e os campos `lentes`, `fator`, `ev_min`, `ev_max`, `preset`, `trava_ae`, `trava_af` e `trava_bb` no status. O `preset` do handshake aceita também `1080p120` e `2160p30` no lado que lê em C++ (iPhone falso e testes) |

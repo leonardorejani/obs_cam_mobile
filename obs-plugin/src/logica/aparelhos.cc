@@ -132,8 +132,29 @@ std::vector<InfoAparelho> RegistroAparelhos::listar() const {
       r.push_back(i);
     }
   }
-  for (auto& p : dados_)
-    if (!vistos.count(p.first) && p.second.info.fontes > 0) r.push_back(montar(p.first, &p.second, false));
+  for (auto& p : dados_) {
+    if (vistos.count(p.first) || p.second.info.fontes == 0) continue;
+    // Uma fonte que segura o iPhone por outro caminho (Wi-Fi por IP ou por id) nao e outro iPhone: o aparelho e um so,
+    // identificado pelo id do app (o mesmo do cabo). A fonte entra na entrada do cabo em vez de abrir uma nova, senao a
+    // lista ganharia "iPhone ... (2)" a cada troca de canal.
+    InfoAparelho* mesmo = nullptr;
+    const std::string id = p.first.rfind("wifi:", 0) == 0 && p.second.info.idApp.empty() ? p.first.substr(5) : p.second.info.idApp;
+    if (!id.empty())
+      for (auto& e : r)
+        if (e.udid != p.first && !e.wifi && e.idApp == id) mesmo = &e;
+    if (!mesmo) {
+      r.push_back(montar(p.first, &p.second, false));
+      continue;
+    }
+    InfoAparelho x = montar(p.first, &p.second, false);
+    if (mesmo->fontes == 0) {
+      mesmo->estado = x.estado;
+      mesmo->mensagem = x.mensagem;
+      mesmo->status = x.status;
+      mesmo->pelaRede = x.pelaRede;
+    }
+    mesmo->fontes += x.fontes;
+  }
   return r;
 }
 
@@ -148,11 +169,19 @@ bool RegistroAparelhos::buscarWifi(const std::string& id, ServicoWifi& saida) co
 }
 
 bool RegistroAparelhos::buscar(const std::string& udid, InfoAparelho& saida) const {
-  for (auto& i : listar())
+  auto lista = listar();
+  for (auto& i : lista)
     if (i.udid == udid) {
       saida = i;
       return true;
     }
+  if (udid.rfind("wifi:", 0) == 0) {  // Wi-Fi do iPhone que ja esta no cabo: e o mesmo aparelho
+    for (auto& i : lista)
+      if (!i.idApp.empty() && i.idApp == udid.substr(5)) {
+        saida = i;
+        return true;
+      }
+  }
   return false;
 }
 
@@ -163,12 +192,29 @@ std::string RegistroAparelhos::nomeConhecido(const std::string& udid) const {
   return rotuloAparelho(it->second.info);
 }
 
-bool RegistroAparelhos::reservar(const std::string& udid, const void* dona) {
+bool RegistroAparelhos::reservar(const std::string& udid, const void* dona, const std::string& idApp) {
   bool mudou = false;
   {
     std::lock_guard<std::mutex> l(m_);
+    // ids do iPhone que esta chave representa: o do proprio nome "wifi:<id>", o ja aprendido nela e o informado
+    auto idDe = [&](const std::string& chave, const Dados* d) {
+      std::set<std::string> ids;
+      if (chave.rfind("wifi:", 0) == 0) ids.insert(chave.substr(5));
+      if (d && !d->info.idApp.empty()) ids.insert(d->info.idApp);
+      return ids;
+    };
+    auto it0 = dados_.find(udid);
+    std::set<std::string> meus = idDe(udid, it0 == dados_.end() ? nullptr : &it0->second);
+    if (!idApp.empty()) meus.insert(idApp);
+    for (auto& p : dados_) {
+      if (!p.second.dona || p.second.dona == dona) continue;
+      bool mesmo = p.first == udid;
+      if (!mesmo)
+        for (auto& id : idDe(p.first, &p.second))
+          if (meus.count(id)) mesmo = true;
+      if (mesmo) return false;
+    }
     Dados& d = dados_[udid];
-    if (d.dona && d.dona != dona) return false;
     if (!d.dona) {
       d.dona = dona;
       d.info.udid = udid;
@@ -181,12 +227,19 @@ bool RegistroAparelhos::reservar(const std::string& udid, const void* dona) {
   return true;
 }
 
+bool RegistroAparelhos::ehDona(const std::string& udid, const void* dona) const {
+  std::lock_guard<std::mutex> l(m_);
+  auto it = dados_.find(udid);
+  return it != dados_.end() && it->second.dona == dona;
+}
+
 void RegistroAparelhos::liberar(const std::string& udid, const void* dona) {
   {
     std::lock_guard<std::mutex> l(m_);
     auto it = dados_.find(udid);
     if (it == dados_.end() || it->second.dona != dona) return;
     it->second.dona = nullptr;
+    it->second.canal = nullptr;
     it->second.info.fontes = 0;
     it->second.info.estado = EstadoAparelho::SemFonte;
     it->second.info.mensagem.clear();
@@ -231,6 +284,41 @@ void RegistroAparelhos::definirEstado(const std::string& udid, EstadoAparelho e,
 void RegistroAparelhos::definirStatus(const std::string& udid, const StatusIphone& s) {
   std::lock_guard<std::mutex> l(m_);
   dados_[udid].info.status = s;
+}
+
+void RegistroAparelhos::definirCanal(const std::string& udid, const void* dona, std::function<bool(const std::string&)> c) {
+  std::lock_guard<std::mutex> l(m_);
+  auto it = dados_.find(udid);
+  if (it == dados_.end() || it->second.dona != dona) return;
+  it->second.canal = std::move(c);
+}
+
+bool RegistroAparelhos::enviarComando(const std::string& udid, const std::string& json) const {
+  std::function<bool(const std::string&)> c;
+  {
+    std::lock_guard<std::mutex> l(m_);
+    auto it = dados_.find(udid);
+    if (it == dados_.end() || !it->second.dona) return false;
+    c = it->second.canal;
+  }
+  return c && c(json);  // fora da trava: o envio pode esperar o soquete
+}
+
+ResultadoTeste avaliarTeste(const StatusIphone& s, bool conectado) {
+  ResultadoTeste r;
+  if (!conectado || s.atrasoP95Ms < 0) return r;
+  r.nivel = ResultadoTeste::Nivel::Ok;
+  auto piora = [&](ResultadoTeste::Nivel n, const char* aviso) {
+    if (static_cast<int>(n) > static_cast<int>(r.nivel)) r.nivel = n;
+    r.avisos.push_back(aviso);
+  };
+  if (!s.canalCabo) piora(ResultadoTeste::Nivel::Atencao, "Teste.Wifi");
+  if (s.atrasoP95Ms > 300) piora(ResultadoTeste::Nivel::Ruim, "Teste.AtrasoMuitoAlto");
+  else if (s.atrasoP95Ms > 150) piora(ResultadoTeste::Nivel::Atencao, "Teste.AtrasoAlto");
+  if (s.canalCabo && s.idaEVoltaMs > 20) piora(ResultadoTeste::Nivel::Atencao, "Teste.IdaEVolta");
+  if (s.fpsAlvo > 0 && s.fps > 0 && s.fps < 0.9 * s.fpsAlvo) piora(ResultadoTeste::Nivel::Atencao, "Teste.Fps");
+  if (s.descartados > 0) piora(ResultadoTeste::Nivel::Atencao, "Teste.Descartados");
+  return r;
 }
 
 }  // namespace fmcam

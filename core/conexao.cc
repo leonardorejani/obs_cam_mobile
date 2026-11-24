@@ -10,6 +10,17 @@ namespace fmappcam {
 
 namespace {
 constexpr auto kEsperaCallbackNoParar = std::chrono::milliseconds(50);
+std::atomic<int> g_soltas{0};
+// Conta uma thread solta enquanto ela vive: o decremento e a ultima coisa que ela faz.
+struct FimSolta {
+  ~FimSolta() { --g_soltas; }
+};
+}  // namespace
+
+int threadsSoltas() { return g_soltas; }
+bool aguardarThreadsSoltas(int ms) {
+  for (int i = 0; i < ms / 10 && g_soltas > 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  return g_soltas == 0;
 }
 
 // Estado compartilhado entre a Conexao e a thread. A thread segura um shared_ptr proprio, entao pode terminar
@@ -25,6 +36,8 @@ struct Conexao::Nucleo {
   std::mutex mDados;
   Soquete sock = kSoqueteInvalido;
   RespostaHandshake resp;
+  RespostaHandshake recusaOcupado;  // com mDados
+  int ocupadosSeguidos = 0;         // so a thread da conexao: base do recuo quando o iPhone esta em uso
   std::string udidAtual;
   bool viaRede = false;      // com mDados: a conexao atual usa a entrada Network do usbmuxd
   bool migrarParaUsb = false;  // so a thread da conexao: a sessao saiu porque a entrada USB voltou
@@ -84,7 +97,11 @@ void Conexao::iniciar() {
     n->udidAtual = n_->udidAtual;
   }
   n_ = n;
-  th_ = std::thread([n] { n->laco(); });
+  ++g_soltas;  // conta toda thread de conexao: a que o parar() solta (callback lento) segue contada ate sair
+  th_ = std::thread([n] {
+    FimSolta fim;
+    n->laco();
+  });
 }
 
 void Conexao::parar() {
@@ -129,6 +146,12 @@ bool Conexao::enviarComando(const std::string& json) {
   return enviarTudo(n->sock, b.data(), b.size());
 }
 
+RespostaHandshake Conexao::recusa() const {
+  auto n = nucleo();
+  if (!n) return {};
+  std::lock_guard<std::mutex> l(n->mDados);
+  return n->recusaOcupado;
+}
 std::string Conexao::udidAtual() const {
   auto n = nucleo();
   if (!n) return {};
@@ -196,6 +219,18 @@ Soquete Conexao::Nucleo::abrir(std::string& erro) {
 void Conexao::Nucleo::laco() {
   definirCancelamentoDaThread(&parar);
   while (!parar) {
+    if (op.podeConectar) {
+      bool pode = false;
+      {
+        std::lock_guard<std::mutex> l(mPorta);
+        pode = !liberado && !parando;
+      }
+      if (pode) pode = op.podeConectar();
+      if (!pode) {
+        dormir(200);
+        continue;
+      }
+    }
     avisar(EstadoConexao::Conectando, "");
     std::string erro;
     Soquete s = abrir(erro);
@@ -210,6 +245,7 @@ void Conexao::Nucleo::laco() {
       // parar() pode ter passado entre o abrir e o registro do soquete: sem isto ele nao o veria
       if (parar) desligarSoquete(s);
       sessao(s, erro, fatal);
+      if (conectada) ocupadosSeguidos = 0;
       conectada = false;
       {
         std::lock_guard<std::mutex> l(mEnvio);
@@ -226,7 +262,16 @@ void Conexao::Nucleo::laco() {
     avisar(fatal ? EstadoConexao::ErroFatal : EstadoConexao::Desconectado, erro);
     if (fatal || !op.reconectar) break;
     ++reconexoes;
-    dormir(op.atrasoReconexaoMs);
+    int espera = op.atrasoReconexaoMs;
+    if (erro == "ocupado") {
+      // iPhone em uso por outro cliente: recuo 1x, 2x, 4x, 8x (teto 4 s), em vez de bater na porta a cada tentativa.
+      // Volta ao ritmo normal na primeira conexao que pegar.
+      ++ocupadosSeguidos;
+      espera = std::min(espera << std::min(ocupadosSeguidos - 1, 3), std::max(espera, 4000));
+    } else {
+      ocupadosSeguidos = 0;
+    }
+    dormir(espera);
   }
   avisar(EstadoConexao::Desconectado, "parado", /*final=*/true);
   definirCancelamentoDaThread(nullptr);
@@ -257,6 +302,10 @@ bool Conexao::Nucleo::sessao(Soquete s, std::string& motivo, bool& fatal) {
   }
   if (!resp_.ok) {
     motivo = resp_.erro;
+    if (resp_.erro == "ocupado") {
+      std::lock_guard<std::mutex> l(mDados);
+      recusaOcupado = resp_;
+    }
     if (resp_.erro == "versao") {
       int maior = 0;
       for (int v : resp_.vSuportadas) maior = std::max(maior, v);
@@ -284,7 +333,9 @@ bool Conexao::Nucleo::sessao(Soquete s, std::string& motivo, bool& fatal) {
   if (comVigia) {
     vigiaParar = std::make_shared<std::atomic<bool>>(false);
     usbVoltou = std::make_shared<std::atomic<bool>>(false);
+    ++g_soltas;
     std::thread([caminho = op.usbmuxCaminho, udid = udidAtual, vigiaParar, usbVoltou] {
+      FimSolta fim;
       definirCancelamentoDaThread(vigiaParar.get());
       while (!*vigiaParar) {
         std::vector<DispositivoUsb> l;

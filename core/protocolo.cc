@@ -454,7 +454,9 @@ ErroHandshake lerPedidoHandshake(const std::string& linhaOrig, PedidoHandshake& 
   if (auto* c = buscarJson(o, "cliente", ValorJson::Tipo::Texto)) p.cliente = c->s.substr(0, 128);
   if (auto* x = buscarJson(o, "preset", ValorJson::Tipo::Texto)) {
     p.preset = "1080p30";  // presente mas invalido: padrao
-    if (x->s == "1080p30" || x->s == "1080p60" || x->s == "720p30" || x->s == "720p60") p.preset = x->s;
+    if (x->s == "1080p30" || x->s == "1080p60" || x->s == "1080p120" || x->s == "2160p30" || x->s == "720p30" ||
+        x->s == "720p60")
+      p.preset = x->s;
   }
   if (auto* x = buscarJson(o, "lente", ValorJson::Tipo::Texto)) {
     if (x->s == "wide" || x->s == "ultra" || x->s == "tele") p.lente = x->s;
@@ -480,6 +482,8 @@ std::string montarRespostaHandshake(const RespostaHandshake& r) {
     s += std::string(",\"fps\":") + b + ",\"codec\":\"" + escaparJson(r.codec.empty() ? "h264" : r.codec) + "\"}";
   } else {
     s = "{\"ok\":false,\"erro\":\"" + escaparJson(r.erro) + "\"";
+    // ocupado leva o id do aparelho (opcional): quem recebe descobre se o dono da vaga e uma fonte do proprio processo
+    if (r.erro == "ocupado" && !r.id.empty()) s += ",\"id\":\"" + escaparJson(r.id) + "\"";
     if (r.erro == "versao") {
       s += ",\"v_suportadas\":[";
       for (size_t i = 0; i < r.vSuportadas.size(); ++i) s += (i ? "," : "") + std::to_string(r.vSuportadas[i]);

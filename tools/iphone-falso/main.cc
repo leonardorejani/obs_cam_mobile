@@ -56,15 +56,17 @@ struct Formato {
   int w = 0, h = 0;
   double fps = 0;
 };
-// "720p30" -> 1280x720 a 30 (16:9, como a extensao)
-bool lerPreset(const std::string& p, Formato& f) {
+// "720p30" -> 1280x720 a 30 (16:9, como a extensao). Com "v" na frente ("v1080p30") o iPhone esta em pe: 1080x1920.
+bool lerPreset(const std::string& pedido, Formato& f) {
+  const bool emPe = !pedido.empty() && pedido[0] == 'v';
+  const std::string p = emPe ? pedido.substr(1) : pedido;
   size_t i = p.find('p');
   if (i == std::string::npos || i == 0 || i + 1 >= p.size()) return false;
   int alt = std::atoi(p.substr(0, i).c_str());
   double fps = std::atof(p.substr(i + 1).c_str());
   if (alt <= 0 || fps <= 0) return false;
-  f.h = alt;
-  f.w = alt * 16 / 9;
+  f.h = emPe ? alt * 16 / 9 : alt;
+  f.w = emPe ? alt : alt * 16 / 9;
   f.fps = fps;
   return true;
 }
@@ -118,6 +120,7 @@ void enviarResposta(Soquete s, const RespostaHandshake& r) {
 void falhaHandshake(Soquete s, const std::string& erro) {
   RespostaHandshake r;
   r.erro = erro;
+  r.id = g.id;
   if (erro == "versao") r.vSuportadas = {1};
   enviarResposta(s, r);
   // espera o cliente fechar (evita RST que apaga a resposta no lado dele)

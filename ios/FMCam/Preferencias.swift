@@ -119,10 +119,28 @@ enum Rotulos {
     static func focoAtivo(_ a: AjustesCamera) -> Bool { a.focoModo == .manual }
     static func evAtivo(_ a: AjustesCamera) -> Bool { a.exposicaoModo == .manual || abs(a.bias) >= 0.05 }
 
+    /// Aviso fixo no meio da tela quando a câmera não está entregando imagem (antes a tela ficava preta ou parada sem dizer
+    /// nada). nil com a câmera ligada, ligando ou desligada de propósito (segundo plano).
+    static func avisoCamera(_ e: EstadoCaptura) -> String? {
+        switch e {
+        case .desligada, .ligando, .ligada: return nil
+        case .semPermissao: return "Sem acesso à câmera. Libere em Ajustes > OBS Cam Mobile > Câmera."
+        case .semCamera: return "Este aparelho não tem câmera traseira."
+        case .interrompida: return "O iPhone pausou a câmera (ligação, outro app ou temperatura). Ela volta sozinha."
+        case .erro(let m): return m
+        }
+    }
+
+    /// Temperatura do balanço de branco travado. Sem temperatura escolhida a trava fica no valor de agora, que não é 5500 K
+    /// (o número que o painel mostrava): aparece "Atual" até o operador mexer na régua.
+    static func temperatura(_ a: AjustesCamera) -> String {
+        a.kelvin.map { "\(Int($0)) K" } ?? "Atual"
+    }
+
     /// "1080p · 60"
     static func formato(_ d: DimensoesVideo?) -> String {
         guard let d else { return "-" }
-        return "\(d.altura)p · \(d.fps)"
+        return "\(min(d.altura, d.largura))p · \(d.fps)"
     }
 }
 
@@ -155,6 +173,29 @@ enum MedidasTela {
     static func recuosDoPainel(lado: LadoMenu, trilhoAberto: Bool) -> (esquerda: CGFloat, direita: CGFloat) {
         let doMenu = trilhoAberto ? painelComTrilho : painelSemTrilho
         return lado == .esquerda ? (doMenu, painelLadoLentes) : (painelLadoLentes, doMenu)
+    }
+
+    /// Tela em pé: o layout dos controles muda (paisagem fica como sempre foi).
+    static func emPe(tela: CGSize) -> Bool { tela.height > tela.width }
+    /// Em pé a faixa de cima tem duas linhas (estado e nome, depois os itens), com a altura sempre reservada.
+    static let topoEmPeAltura: CGFloat = topoAltura * 2 + 6
+    /// Do topo da tela em pé: respiro do notch ou da ilha, a faixa de cima e a folga até o menu.
+    static func topoEmPe(inseTopo: CGFloat) -> CGFloat { max(inseTopo, 20) + topoY }
+
+    /// Proporção (largura / altura) do vídeo em pé ou deitado. O lado vem de quem desenha, não de `dim`: depois de girar,
+    /// `dim` só muda quando o codificador troca (mais de meio segundo), e a tela já está no lado novo.
+    static func proporcao(_ dim: DimensoesVideo?, emPe: Bool) -> CGFloat {
+        guard let d = dim, d.largura > 0, d.altura > 0 else { return emPe ? 9.0 / 16.0 : 16.0 / 9.0 }
+        let p = CGFloat(max(d.largura, d.altura)) / CGFloat(min(d.largura, d.altura))
+        return emPe ? 1 / p : p
+    }
+
+    static let espacoTrilhoEmPe: CGFloat = 6
+    static let itemEmPeMinimo: CGFloat = 60
+    /// Em pé todos os botões do trilho têm a mesma largura: dividem a linha, e quando não cabem ela rola de lado.
+    static func larguraItemEmPe(disponivel: CGFloat, itens: Int) -> CGFloat {
+        guard itens > 0 else { return itemEmPeMinimo }
+        return max(itemEmPeMinimo, ((disponivel - espacoTrilhoEmPe * CGFloat(itens - 1)) / CGFloat(itens)).rounded(.down))
     }
 
     /// Retângulo do vídeo na tela inteira (resizeAspect).

@@ -58,7 +58,7 @@ final class CaixaSensores {
 /// Campos de câmera do status tipo 3 (nomes e valores fixados em docs/PROTOCOLO.md).
 enum StatusCamera {
     static func campos(ajustes a: AjustesCamera, leitura: LeituraCamera, noAr: Bool, dim: DimensoesVideo?,
-                       assinaturaVence: Date? = nil) -> [String: Any] {
+                       assinaturaVence: Date? = nil, remoto: InfoRemota? = nil, preset: Preset? = nil) -> [String: Any] {
         let foco = a.focoModo == .manual ? "manual" : (a.focoTravado ? "travado" : a.focoModo.rawValue)
         let exposicao = a.exposicaoModo == .manual ? "manual" : (a.exposicaoTravada ? "travada" : "auto")
         var o: [String: Any] = [
@@ -74,7 +74,61 @@ enum StatusCamera {
         ]
         if let v = assinaturaVence { o["assinatura_vence"] = Assinatura.iso(v) }
         if let d = dim { o["w"] = d.largura; o["h"] = d.altura; o["fps_alvo"] = d.fps }
+        if let r = remoto {
+            // Campos do controle remoto: o estado dos botões como a tela mostra.
+            o["lentes"] = r.lentes
+            if let f = r.fator { o["fator"] = f }
+            o["ev_min"] = r.evMin
+            o["ev_max"] = r.evMax
+            o["trava_ae"] = a.exposicaoTravada
+            o["trava_af"] = a.focoTravado
+            o["trava_bb"] = Rotulos.bbAtivo(a)
+        }
+        if let p = preset { o["preset"] = p.rawValue }
         return o
+    }
+}
+
+/// Comando de controle remoto que o OBS manda no pacote tipo 4. Cada um vale como o toque equivalente na tela.
+/// Campo desconhecido é ignorado, comando desconhecido ou valor inválido vira nil (nada acontece).
+enum ComandoRemoto: Equatable {
+    case lente(fator: Double)
+    case ev(Double)
+    case travaAE(Bool)
+    case travaAF(Bool)
+    case travaBB(Bool)
+    case qualidade(preset: Preset?, bitrate: Int?)
+
+    static func interpretar(_ membros: [(String, JSONEstrito.Valor)]) -> ComandoRemoto? {
+        func campo(_ nome: String) -> JSONEstrito.Valor? { membros.first { $0.0 == nome }?.1 }
+        func numero(_ nome: String) -> Double? {
+            guard case .numero(let t)? = campo(nome), let d = Double(t), d.isFinite else { return nil }
+            return d
+        }
+        func booleano(_ nome: String) -> Bool? {
+            if case .booleano(let b)? = campo(nome) { return b }
+            return nil
+        }
+        guard case .texto(let cmd)? = campo("cmd") else { return nil }
+        switch cmd {
+        case "lente":
+            guard let f = numero("fator"), f > 0 else { return nil }
+            return .lente(fator: f)
+        case "ev":
+            return numero("valor").map(ComandoRemoto.ev)
+        case "trava_ae": return booleano("valor").map(ComandoRemoto.travaAE)
+        case "trava_af": return booleano("valor").map(ComandoRemoto.travaAF)
+        case "trava_bb": return booleano("valor").map(ComandoRemoto.travaBB)
+        case "qualidade":
+            var preset: Preset?
+            if case .texto(let t)? = campo("preset") { preset = Preset(rawValue: t) }
+            var bitrate: Int?
+            if let d = numero("bitrate"), d == d.rounded(), let i = Int(exactly: d), PedidoHandshake.faixaBitrate.contains(i) { bitrate = i }
+            guard preset != nil || bitrate != nil else { return nil }
+            return .qualidade(preset: preset, bitrate: bitrate)
+        default:
+            return nil
+        }
     }
 }
 
@@ -139,6 +193,12 @@ final class Servidor {
     }
 
     var aoAtualizar: ((InfoServidor) -> Void)?
+    /// Quem aplica um comando remoto: o app põe aqui o mesmo código que o toque na tela usa. Vem na fila do servidor e
+    /// precisa chamar `pronto` depois de aplicar (aí o status imediato sai com o estado novo). Sem isso o comando é ignorado.
+    var aoComandoRemoto: ((ComandoRemoto, @escaping () -> Void) -> Void)? {
+        get { travaPorta.lock(); defer { travaPorta.unlock() }; return _aoComandoRemoto }
+        set { travaPorta.lock(); _aoComandoRemoto = newValue; travaPorta.unlock() }
+    }
 
     private let opcoes: Opcoes
     private var identidade: IdentidadeAparelho
@@ -153,6 +213,8 @@ final class Servidor {
     private let travaPorta = NSLock()
     private var _porta: UInt16?
     private var _picoFila = 0
+    private var _aoComandoRemoto: ((ComandoRemoto, @escaping () -> Void) -> Void)?
+    private var _aoQualidadeSemConexao: ((Preset) -> Void)?
 
     /// Maior tamanho que a fila de envio chegou a ter (diagnóstico e testes).
     var picoBytesNaFila: Int {
@@ -184,8 +246,21 @@ final class Servidor {
         }
     }
 
-    /// A qualidade salva no iPhone mudou. Se tem conexão e o OBS não fixou, reconfigura sem derrubar.
-    func qualidadeMudou() { fila.async { self.sessao?.qualidadeSalvaMudou() } }
+    /// Sem conexão, a qualidade salva no iPhone vai direto para a câmera do preview (formato novo na hora, e a próxima
+    /// conexão já encontra a câmera nele). Chamado na fila do servidor, então nunca corre com a partida de uma conexão.
+    var aoQualidadeSemConexao: ((Preset) -> Void)? {
+        get { travaPorta.lock(); defer { travaPorta.unlock() }; return _aoQualidadeSemConexao }
+        set { travaPorta.lock(); _aoQualidadeSemConexao = newValue; travaPorta.unlock() }
+    }
+
+    /// A qualidade salva no iPhone mudou. Se tem conexão e o OBS não fixou, reconfigura sem derrubar. Sem conexão, a câmera
+    /// do preview muda de formato (antes ela ficava no formato velho e o "Formato" do topo contradizia o painel Qualidade).
+    func qualidadeMudou() {
+        fila.async {
+            if let s = self.sessao { s.qualidadeSalvaMudou(); return }
+            self.aoQualidadeSemConexao?(self.ajustes.valor.preset)
+        }
+    }
 
     func parar() {
         fila.async {
@@ -244,7 +319,7 @@ final class Servidor {
     private func novaConexao(_ c: NWConnection) {
         if sessao != nil {
             // Lê a linha do cliente (até timeoutHandshake) antes de responder: fechar sem ler gera RST e o Windows perde a resposta.
-            Rejeicao(conexao: c, fila: fila, timeout: opcoes.timeoutHandshake).iniciar()
+            Rejeicao(conexao: c, fila: fila, timeout: opcoes.timeoutHandshake, id: identidade.id).iniciar()
             return
         }
         let s = Sessao(conexao: c, fila: fila, opcoes: opcoes, identidade: identidade,
@@ -269,6 +344,10 @@ final class Servidor {
             self.ajustes.noAr = v
             self.info.noAr = v
             self.publicar()
+        }
+        s.executarComando = { [weak self] c, pronto in
+            guard let aplicar = self?.aoComandoRemoto else { return }
+            aplicar(c, pronto)
         }
         s.aoFila = { [weak self] total in
             guard let self else { return }
@@ -323,6 +402,7 @@ private final class Sessao {
     var aoNoAr: ((Bool) -> Void)?
     var aoQualidade: ((QualidadeEnvio) -> Void)?
     var aoEncerrar: ((String?) -> Void)?
+    var executarComando: ((ComandoRemoto, @escaping () -> Void) -> Void)?
 
     private var fase = Fase.handshake
     private var bufferHandshake = Data()
@@ -351,6 +431,12 @@ private final class Sessao {
     private var quadrosLog = 0
     private var descartadosLog = 0
     private var ultimoAvisoFila = Date.distantPast
+    private var ultimoFps = 0.0
+    private var ultimoKbps = 0
+    private var trocasEmAndamento = 0
+    /// Última qualidade pedida à câmera (nil = a que está em uso).
+    private var qualidadeAlvo: QualidadeEnvio?
+    private var statusAoTerminarTroca = false
     private static let contador = OSAllocatedUnfairLock(initialState: 0)
     let numero: Int = Sessao.contador.withLock { $0 += 1; return $0 }
 
@@ -517,6 +603,8 @@ private final class Sessao {
             let resto = pendenteApos
             pendenteApos = Data()
             if !resto.isEmpty { processarPacotes(resto) }
+            // A qualidade pode ter mudado no iPhone enquanto a câmera ligava (aí o aviso foi ignorado): alinha agora.
+            qualidadeSalvaMudou()
         }
     }
 
@@ -568,6 +656,11 @@ private final class Sessao {
             if bytesNaFila > opcoes.tetoFilaBytes {
                 encerrar("fila de envio acima do teto de \(opcoes.tetoFilaBytes) bytes")
             }
+        case .dimensao(let dim):
+            // Girou entre paisagem e em pé: o tipo 1 novo vem logo a seguir. O status passa a dizer o tamanho novo.
+            dimAtual = dim
+            Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): tamanho do vídeo agora \(dim.largura, privacy: .public)x\(dim.altura, privacy: .public)")
+            aoMudar?(.conectado(clienteNome), "\(dim.largura)x\(dim.altura) a \(dim.fps) fps")
         case .erro(let msg):
             Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): erro da fonte: \(msg, privacy: .public)")
             erroCamera = msg
@@ -622,6 +715,8 @@ private final class Sessao {
                         fonte.pedirKeyframe()
                     } else if cmd == "noar", case .booleano(let v)? = membros.first(where: { $0.0 == "valor" })?.1 {
                         aoNoAr?(v)
+                    } else if let c = ComandoRemoto.interpretar(membros) {
+                        executarRemoto(c)
                     }
                 default: break
                 }
@@ -631,15 +726,50 @@ private final class Sessao {
         }
     }
 
+    /// Comando remoto do OBS. Na qualidade, o campo que o OBS fixou no handshake desta conexão é ignorado. Depois de aplicar,
+    /// o status sai na hora (além do ciclo de 2 s) para o painel do OBS refletir em tempo real.
+    private func executarRemoto(_ c: ComandoRemoto) {
+        var comando = c
+        if case .qualidade(let p, let b) = c {
+            let livrePreset = qualidade.presetObs ? nil : p
+            let livreBitrate = qualidade.bitrateObs ? nil : b
+            guard livrePreset != nil || livreBitrate != nil else {
+                Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): comando de qualidade ignorado, o OBS fixou esse campo nesta conexão")
+                return
+            }
+            comando = .qualidade(preset: livrePreset, bitrate: livreBitrate)
+        }
+        guard let executar = executarComando else { return }
+        Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): comando remoto \(String(describing: comando), privacy: .public)")
+        executar(comando) { [weak self] in
+            self?.fila.async { self?.statusAposComando() }
+        }
+    }
+
+    /// Status fora do ciclo. Não zera a janela de fps e kbps (uma janela curta daria número falso): repete a última medida.
+    private func statusAposComando() {
+        guard fase == .transmitindo else { return }
+        enviarStatus(medir: false)
+        if trocasEmAndamento > 0 { statusAoTerminarTroca = true }
+    }
+
     /// Mudança de qualidade no iPhone durante a conexão. Não vale se o OBS fixou preset ou bitrate.
     func qualidadeSalvaMudou() {
         guard fase == .transmitindo, !(qualidade.presetObs && qualidade.bitrateObs) else { return }
         let nova = qualidade.comSalva(ajustes.valor)
-        guard nova.preset != qualidade.preset || nova.bitrate != qualidade.bitrate else { return }
+        // Compara com o que foi PEDIDO por último, não com o que já terminou: voltar ao formato antigo com a troca anterior
+        // ainda em andamento precisa de outro pedido (senão a câmera fica no formato novo e a tela diz o antigo).
+        let alvo = qualidadeAlvo ?? qualidade
+        guard nova.preset != alvo.preset || nova.bitrate != alvo.bitrate else { return }
+        qualidadeAlvo = nova
         Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): qualidade trocada no iPhone para \(nova.preset.rawValue, privacy: .public), \(nova.bitrate, privacy: .public) bps")
+        trocasEmAndamento += 1
         fonte.reconfigurar(ConfigVideo(preset: nova.preset, bitrate: nova.bitrate)) { [weak self] r in
             self?.fila.async {
-                guard let self, self.fase == .transmitindo else { return }
+                guard let self else { return }
+                self.trocasEmAndamento -= 1
+                guard self.fase == .transmitindo else { return }
+                if case .failure = r, self.qualidadeAlvo == nova { self.qualidadeAlvo = nil }
                 switch r {
                 case .success(let dim):
                     self.dimAtual = dim
@@ -647,6 +777,11 @@ private final class Sessao {
                     self.limiteFila = max(self.opcoes.limiteFilaBytes, nova.bitrate / 8)
                     self.aoMudar?(.conectado(self.clienteNome), "\(dim.largura)x\(dim.altura) a \(dim.fps) fps")
                     self.aoQualidade?(nova)
+                    // Comando remoto de qualidade: o status imediato saiu antes da troca terminar, este leva o formato novo.
+                    if self.statusAoTerminarTroca && self.trocasEmAndamento == 0 {
+                        self.statusAoTerminarTroca = false
+                        self.enviarStatus(medir: false)
+                    }
                 case .failure(let e):
                     Log.servidor.notice("fmcam servidor: sessao \(self.numero, privacy: .public): troca de qualidade falhou: \(e.mensagem, privacy: .public)")
                 }
@@ -654,20 +789,27 @@ private final class Sessao {
         }
     }
 
-    private func enviarStatus() {
+    private func enviarStatus(medir: Bool = true) {
         guard fase == .transmitindo else { return }
-        let agora = Date()
-        let dt = max(0.001, agora.timeIntervalSince(inicioJanela))
-        let fps = (Double(quadrosJanela) / dt * 10).rounded() / 10
-        let kbps = Int(Double(bytesJanela) * 8 / dt / 1000)
-        quadrosJanela = 0
-        bytesJanela = 0
-        inicioJanela = agora
+        var fps = ultimoFps
+        var kbps = ultimoKbps
+        if medir {
+            let agora = Date()
+            let dt = max(0.001, agora.timeIntervalSince(inicioJanela))
+            fps = (Double(quadrosJanela) / dt * 10).rounded() / 10
+            kbps = Int(Double(bytesJanela) * 8 / dt / 1000)
+            quadrosJanela = 0
+            bytesJanela = 0
+            inicioJanela = agora
+            ultimoFps = fps
+            ultimoKbps = kbps
+        }
         let s = sensores.ler()
         let aj = ajustes.valor
         let leitura = ajustes.leitura
         var obj = StatusCamera.campos(ajustes: aj, leitura: leitura, noAr: ajustes.noAr, dim: dimAtual,
-                                  assinaturaVence: ajustes.assinaturaVence)
+                                  assinaturaVence: ajustes.assinaturaVence, remoto: ajustes.remoto,
+                                  preset: QualidadeEnvio.preset(de: dimAtual) ?? qualidade.preset)
         obj["bateria"] = s.bateria
         obj["carregando"] = s.carregando
         obj["temp"] = temperaturaTexto(ProcessInfo.processInfo.thermalState)
@@ -680,7 +822,7 @@ private final class Sessao {
         if let json = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) {
             enviar(Pacote(tipo: TipoPacote.status, tempo: relogioHostMicros(), dados: json))
         }
-        aoMetricas?(fps, kbps)
+        if medir { aoMetricas?(fps, kbps) }
     }
 
     /// Manda a linha de erro do handshake e fecha depois que ela saiu.
@@ -713,14 +855,16 @@ private final class Rejeicao {
     let conexao: NWConnection
     let fila: DispatchQueue
     let timeout: TimeInterval
+    let id: String
     private var buffer = Data()
     private var feito = false
     private var timer: DispatchSourceTimer?
 
-    init(conexao: NWConnection, fila: DispatchQueue, timeout: TimeInterval) {
+    init(conexao: NWConnection, fila: DispatchQueue, timeout: TimeInterval, id: String) {
         self.conexao = conexao
         self.fila = fila
         self.timeout = timeout
+        self.id = id
     }
 
     func iniciar() {
@@ -747,7 +891,7 @@ private final class Rejeicao {
         guard !feito else { return }
         feito = true
         timer?.cancel()
-        conexao.send(content: Handshake.respostaErro("ocupado"), contentContext: .finalMessage, isComplete: true,
+        conexao.send(content: Handshake.respostaErro("ocupado", id: id), contentContext: .finalMessage, isComplete: true,
                      completion: .contentProcessed { [self] _ in conexao.cancel() })
     }
 

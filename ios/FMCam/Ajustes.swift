@@ -71,6 +71,20 @@ struct LimitesCamera: Equatable {
     var isoMax: Double = 3200
     var obturadorMin: Double = 1.0 / 8000
     var obturadorMax: Double = 1.0 / 30
+    /// Faixa de EV que o controle da tela oferece, já cortada pelo que o aparelho aceita.
+    var evMin: Double = AjustesCamera.faixaEV.lowerBound
+    var evMax: Double = AjustesCamera.faixaEV.upperBound
+
+    var faixaEV: ClosedRange<Double> { evMin...max(evMax, evMin) }
+
+    /// Corta a faixa da tela pela do aparelho (`minExposureTargetBias`, `maxExposureTargetBias`). Valor sem sentido do aparelho
+    /// (não finito, faixa vazia) deixa a faixa da tela como está.
+    static func faixaEV(aparelhoMin: Double, aparelhoMax: Double) -> (min: Double, max: Double) {
+        let tela = AjustesCamera.faixaEV
+        guard aparelhoMin.isFinite, aparelhoMax.isFinite, aparelhoMin < aparelhoMax else { return (tela.lowerBound, tela.upperBound) }
+        let lo = max(tela.lowerBound, aparelhoMin), hi = min(tela.upperBound, aparelhoMax)
+        return lo <= hi ? (lo, hi) : (tela.lowerBound, tela.upperBound)
+    }
 }
 
 enum Obturador {
@@ -115,6 +129,8 @@ struct AjustesCamera: Equatable, Codable {
 
     static let chave = "ajustesCamera"
     static let faixaBias = -3.0...3.0
+    /// Faixa do controle de EV na tela (o aparelho pode ter uma faixa menor: ver `LimitesCamera.faixaEV`).
+    static let faixaEV = -2.0...2.0
     static let faixaZoom = 1.0...10.0
     static let faixaKelvin = 2000.0...10000.0
 
@@ -183,6 +199,7 @@ final class CaixaAjustes {
     private var _leitura = LeituraCamera()
     private var _noAr = false
     private var _assinatura: Date?
+    private var _remoto = InfoRemota()
     init(_ v: AjustesCamera = AjustesCamera()) { _valor = v }
     var valor: AjustesCamera {
         get { trava.lock(); defer { trava.unlock() }; return _valor }
@@ -196,6 +213,11 @@ final class CaixaAjustes {
     var assinaturaVence: Date? {
         get { trava.lock(); defer { trava.unlock() }; return _assinatura }
         set { trava.lock(); _assinatura = newValue; trava.unlock() }
+    }
+    /// Lentes, botão de lente em uso e faixa de EV como a tela mostra (o servidor manda no status tipo 3).
+    var remoto: InfoRemota {
+        get { trava.lock(); defer { trava.unlock() }; return _remoto }
+        set { trava.lock(); _remoto = newValue; trava.unlock() }
     }
     var noAr: Bool {
         get { trava.lock(); defer { trava.unlock() }; return _noAr }
@@ -231,6 +253,34 @@ struct OpcaoLente: Equatable, Identifiable {
     var zoom: Double
     var rotulo: String
     var id: String { rotulo }
+
+    /// O número do botão ("0,5x" vira 0.5). nil se o rótulo não for um número.
+    var fator: Double? {
+        Double(rotulo.replacingOccurrences(of: "x", with: "").replacingOccurrences(of: ",", with: "."))
+    }
+}
+
+/// O que o controle remoto do OBS precisa saber da tela (campos novos do status tipo 3).
+struct InfoRemota: Equatable {
+    /// Botões de lente que o aparelho oferece agora, na ordem da tela.
+    var lentes: [Double] = []
+    /// O botão de lente em uso. nil quando nenhum está aceso (zoom de pinça entre dois botões).
+    var fator: Double?
+    var evMin = AjustesCamera.faixaEV.lowerBound
+    var evMax = AjustesCamera.faixaEV.upperBound
+
+    /// Mesma conta que a tela usa para acender o botão (`ModeloApp.estaSelecionada`).
+    static func montar(lentes: [OpcaoLente], ajustes a: AjustesCamera, limites: LimitesCamera) -> InfoRemota {
+        let numeros = lentes.compactMap(\.fator)
+        let ativa = lentes.first { $0.lente == a.lente && abs(a.zoom - $0.zoom) < 0.15 }?.fator
+        return InfoRemota(lentes: numeros, fator: ativa, evMin: limites.evMin, evMax: max(limites.evMax, limites.evMin))
+    }
+
+    /// Botão de lente que o OBS pediu pelo número. nil se o aparelho não tem esse botão.
+    static func opcao(fator: Double, entre lentes: [OpcaoLente]) -> OpcaoLente? {
+        guard fator.isFinite else { return nil }
+        return lentes.first { o in o.fator.map { abs($0 - fator) < 0.01 } ?? false }
+    }
 }
 
 enum OpcoesLente {
@@ -326,10 +376,23 @@ struct QualidadeEnvio: Equatable {
         rotulo(bitrate: bitrate).replacingOccurrences(of: " Mbps", with: "")
     }
 
+    /// Formato que o aparelho de fato vai usar para o pedido: o próprio, ou o mais próximo abaixo que a lente aceita
+    /// (a mesma lista de quedas da câmera). nil se nenhum da lista existe.
+    static func efetivo(_ p: Preset, suportados: Set<Preset>) -> Preset? {
+        p.quedas.first { suportados.contains($0) }
+    }
+
+    /// Formato que o painel Qualidade mostra quando vale o salvo no iPhone.
+    static func exibido(salvo: Preset, suportados: Set<Preset>) -> Preset {
+        efetivo(salvo, suportados: suportados) ?? salvo
+    }
+
     /// Formato que está saindo, a partir das dimensões reais.
     static func preset(de d: DimensoesVideo?) -> Preset? {
         guard let d else { return nil }
-        return Preset.allCases.first { $0.altura == d.altura && $0.largura == d.largura && $0.fps == d.fps }
+        // Em pé o vídeo sai transposto (1080x1920): o formato é o mesmo de paisagem.
+        let l = max(d.largura, d.altura), a = min(d.largura, d.altura)
+        return Preset.allCases.first { $0.altura == a && $0.largura == l && $0.fps == d.fps }
     }
 }
 

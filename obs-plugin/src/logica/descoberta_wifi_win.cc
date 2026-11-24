@@ -14,7 +14,10 @@
 #include <ws2tcpip.h>
 
 #include <map>
+#include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "descoberta_wifi.h"
 
@@ -29,31 +32,141 @@ std::string utf8(const wchar_t* w) {
   return s;
 }
 
+// Estado que os callbacks do windns tocam. Vive num shared_ptr: os callbacks rodam em threads do pool do Windows e
+// podem chegar depois do ~DescobertaWin (resolucao em andamento, ultimo callback do cancel), entao nunca podem tocar
+// em `this`. Depois de parar(), `vivo` fica false e nenhum callback mais avisa o dono.
+struct Estado {
+  std::mutex m;
+  std::map<std::string, ServicoWifi> servicos;
+  DescobertaWifi::AoMudar aoMudar;
+  bool vivo = true;
+
+  void notificar() {
+    DescobertaWifi::AoMudar cb;
+    {
+      std::lock_guard<std::mutex> l(m);
+      if (!vivo) return;
+      cb = aoMudar;
+    }
+    if (cb) cb();  // fora da trava: o dono chama servicos() de dentro do aviso
+  }
+  void remover(const std::string& chave) {
+    bool tinha;
+    {
+      std::lock_guard<std::mutex> l(m);
+      tinha = servicos.erase(chave) > 0;
+    }
+    if (tinha) notificar();
+  }
+};
+using EstadoPtr = std::shared_ptr<Estado>;
+
+struct AlvoResolve {
+  EstadoPtr estado;
+  uint32_t ifIndex;
+  std::wstring instancia;
+};
+
+VOID WINAPI aoResolve(DWORD status, PVOID ctx, PDNS_SERVICE_INSTANCE inst) {
+  std::unique_ptr<AlvoResolve> alvo(static_cast<AlvoResolve*>(ctx));
+  if (status == ERROR_SUCCESS && inst && inst->ip4Address) {
+    ServicoWifi s;
+    std::string completo = utf8(inst->pszInstanceName);
+    size_t ponto = completo.find("._fmcam");
+    s.nome = completo.substr(0, ponto);
+    s.porta = inst->wPort;
+    char b[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, inst->ip4Address, b, sizeof b);
+    s.ip = b;
+    for (DWORD i = 0; i < inst->dwPropertyCount; ++i) {
+      std::string k = utf8(inst->keys[i]), v = utf8(inst->values[i]);
+      if (k == "id") s.id = v;
+      if (k == "v") s.versao = std::atoi(v.c_str());
+    }
+    if (s.id.empty()) s.id = s.nome;
+    {
+      std::lock_guard<std::mutex> l(alvo->estado->m);
+      alvo->estado->servicos[utf8(alvo->instancia.c_str())] = s;
+    }
+    alvo->estado->notificar();
+  }
+  if (inst) DnsServiceFreeInstance(inst);
+}
+
+void resolver(const EstadoPtr& estado, uint32_t ifIndex, const std::wstring& instancia) {
+  auto* alvo = new AlvoResolve{estado, ifIndex, instancia};
+  auto* req = new DNS_SERVICE_RESOLVE_REQUEST();
+  req->Version = DNS_QUERY_REQUEST_VERSION1;
+  req->InterfaceIndex = ifIndex;
+  req->QueryName = const_cast<PWSTR>(alvo->instancia.c_str());
+  req->pResolveCompletionCallback = &aoResolve;
+  req->pQueryContext = alvo;
+  auto* cancel = new DNS_SERVICE_CANCEL();
+  if (DnsServiceResolve(req, cancel) != DNS_REQUEST_PENDING) {
+    delete alvo;
+    delete req;
+    delete cancel;
+  }  // (req e cancel vazam por servico encontrado: poucos bytes, aceitavel ate medir no Windows)
+}
+
+// Contexto do Browse: um por iniciar(), e de proposito nunca liberado. O ultimo callback do cancel pode chegar depois
+// do destrutor, e o Windows nao garante quando. Sao poucos bytes uma unica vez.
+struct CtxBrowse {
+  EstadoPtr estado;
+  uint32_t ifIndex;
+};
+
+VOID WINAPI aoBrowse(DWORD status, PVOID ctx, PDNS_RECORD rec) {
+  auto* c = static_cast<CtxBrowse*>(ctx);
+  if (status == ERROR_SUCCESS) {
+    for (PDNS_RECORD r = rec; r; r = r->pNext) {
+      if (r->wType != DNS_TYPE_PTR) continue;
+      std::wstring instancia = r->Data.PTR.pNameHost;
+      if (r->dwTtl == 0) {  // anuncio retirado
+        c->estado->remover(utf8(instancia.c_str()));
+        continue;
+      }
+      resolver(c->estado, c->ifIndex, instancia);
+    }
+  }
+  if (rec) DnsRecordListFree(rec, DnsFreeRecordList);
+}
+
 class DescobertaWin : public DescobertaWifi {
  public:
-  explicit DescobertaWin(uint32_t ifIndex) : ifIndex_(ifIndex) {}
+  explicit DescobertaWin(uint32_t ifIndex) : ifIndex_(ifIndex), estado_(std::make_shared<Estado>()) {}
   ~DescobertaWin() override { parar(); }
 
   void iniciar(AoMudar cb) override {
-    aoMudar_ = std::move(cb);
+    if (ativo_) return;
+    {
+      std::lock_guard<std::mutex> l(estado_->m);
+      estado_->aoMudar = std::move(cb);
+      estado_->vivo = true;
+    }
     DNS_SERVICE_BROWSE_REQUEST req = {};
     req.Version = DNS_QUERY_REQUEST_VERSION1;
     req.InterfaceIndex = ifIndex_;
     req.QueryName = L"_fmcam._tcp.local";
-    req.pBrowseCallback = &DescobertaWin::aoBrowse;
-    req.pQueryContext = this;
+    req.pBrowseCallback = &aoBrowse;
+    req.pQueryContext = new CtxBrowse{estado_, ifIndex_};
     if (DnsServiceBrowse(&req, &cancel_) == DNS_REQUEST_PENDING) ativo_ = true;
   }
   void parar() override {
+    {
+      std::lock_guard<std::mutex> l(estado_->m);
+      estado_->vivo = false;  // callbacks que ainda chegarem nao avisam mais ninguem
+      estado_->aoMudar = nullptr;
+    }
     if (ativo_) {
       DnsServiceBrowseCancel(&cancel_);
       ativo_ = false;
     }
   }
   std::vector<ServicoWifi> servicos() const override {
-    std::lock_guard<std::mutex> l(m_);
+    std::lock_guard<std::mutex> l(estado_->m);
     std::vector<ServicoWifi> r;
-    for (auto& p : servicos_) {
+    for (auto& p : estado_->servicos) {
       bool dup = false;
       for (auto& x : r) dup = dup || x.id == p.second.id;
       if (!dup) r.push_back(p.second);
@@ -62,80 +175,10 @@ class DescobertaWin : public DescobertaWifi {
   }
 
  private:
-  static VOID WINAPI aoBrowse(DWORD status, PVOID ctx, PDNS_RECORD rec) {
-    auto* d = static_cast<DescobertaWin*>(ctx);
-    if (status == ERROR_SUCCESS) {
-      for (PDNS_RECORD r = rec; r; r = r->pNext) {
-        if (r->wType != DNS_TYPE_PTR) continue;
-        std::wstring instancia = r->Data.PTR.pNameHost;
-        if (r->dwTtl == 0) {  // anuncio retirado
-          d->remover(utf8(instancia.c_str()));
-          continue;
-        }
-        d->resolver(instancia);
-      }
-    }
-    if (rec) DnsRecordListFree(rec, DnsFreeRecordList);
-  }
-
-  void resolver(const std::wstring& instancia) {
-    auto* alvo = new std::pair<DescobertaWin*, std::wstring>(this, instancia);
-    auto* req = new DNS_SERVICE_RESOLVE_REQUEST();
-    req->Version = DNS_QUERY_REQUEST_VERSION1;
-    req->InterfaceIndex = ifIndex_;
-    req->QueryName = const_cast<PWSTR>(alvo->second.c_str());
-    req->pResolveCompletionCallback = &DescobertaWin::aoResolve;
-    req->pQueryContext = alvo;
-    auto* cancel = new DNS_SERVICE_CANCEL();
-    if (DnsServiceResolve(req, cancel) != DNS_REQUEST_PENDING) {
-      delete alvo;
-      delete req;
-      delete cancel;
-    }  // (req e cancel vazam por servico encontrado: poucos bytes, aceitavel ate medir no Windows)
-  }
-
-  static VOID WINAPI aoResolve(DWORD status, PVOID ctx, PDNS_SERVICE_INSTANCE inst) {
-    auto* alvo = static_cast<std::pair<DescobertaWin*, std::wstring>*>(ctx);
-    if (status == ERROR_SUCCESS && inst && inst->ip4Address) {
-      ServicoWifi s;
-      std::string completo = utf8(inst->pszInstanceName);
-      size_t ponto = completo.find("._fmcam");
-      s.nome = completo.substr(0, ponto);
-      s.porta = inst->wPort;
-      char b[INET_ADDRSTRLEN];
-      inet_ntop(AF_INET, inst->ip4Address, b, sizeof b);
-      s.ip = b;
-      for (DWORD i = 0; i < inst->dwPropertyCount; ++i) {
-        std::string k = utf8(inst->keys[i]), v = utf8(inst->values[i]);
-        if (k == "id") s.id = v;
-        if (k == "v") s.versao = std::atoi(v.c_str());
-      }
-      if (s.id.empty()) s.id = s.nome;
-      {
-        std::lock_guard<std::mutex> l(alvo->first->m_);
-        alvo->first->servicos_[utf8(alvo->second.c_str())] = s;
-      }
-      if (alvo->first->aoMudar_) alvo->first->aoMudar_();
-    }
-    if (inst) DnsServiceFreeInstance(inst);
-    delete alvo;
-  }
-
-  void remover(const std::string& chave) {
-    bool tinha;
-    {
-      std::lock_guard<std::mutex> l(m_);
-      tinha = servicos_.erase(chave) > 0;
-    }
-    if (tinha && aoMudar_) aoMudar_();
-  }
-
   uint32_t ifIndex_;
-  AoMudar aoMudar_;
+  EstadoPtr estado_;
   DNS_SERVICE_CANCEL cancel_ = {};
   bool ativo_ = false;
-  mutable std::mutex m_;
-  std::map<std::string, ServicoWifi> servicos_;
 };
 
 }  // namespace
