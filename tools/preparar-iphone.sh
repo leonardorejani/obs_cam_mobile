@@ -14,7 +14,7 @@
 #   sh tools/preparar-iphone.sh ipa UDID     copia o OBSCamMobile.ipa para o SideStore do aparelho
 set -eu
 cd "$(dirname "$0")/.."
-CONHECIDOS="${CONHECIDOS:-00008130-00056554110A001C}"
+CONHECIDOS="${CONHECIDOS:-}"  # UDIDs a ignorar, separados por espaço
 IPA="dist/OBSCamMobile.ipa"
 
 udids() { idevice_id -l 2>/dev/null | sort -u; }

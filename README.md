@@ -18,6 +18,7 @@
     <img src="https://img.shields.io/badge/Swift-SwiftUI-0E0E0E?style=for-the-badge&logo=swift&logoColor=white" alt="Swift" />
     <img src="https://img.shields.io/badge/C%2B%2B-17-0E0E0E?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++17" />
     <img src="https://img.shields.io/badge/Windows%20%7C%20macOS-x64%20%7C%20arm64-0E0E0E?style=for-the-badge&logo=windows&logoColor=white" alt="Windows e macOS" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-4A4A4A?style=for-the-badge&labelColor=0E0E0E" alt="licença MIT" /></a>
   </p>
 
   <p>
@@ -170,7 +171,11 @@ O instalador do Windows embute o serviço USB da Apple, tirado do instalador ofi
 
 ## Licença
 
-Todos os direitos reservados. O código é privado e não pode ser copiado, distribuído ou usado sem autorização. OBS Studio é marca do OBS Project, e este projeto não tem ligação com ele.
+O código deste repositório está sob a [licença MIT](LICENSE). Três pontos à parte:
+
+- **Extensão compilada:** ela usa o libobs, que é GPLv2. O binário distribuído junto com ele segue as condições da GPL.
+- **Serviço USB da Apple:** não faz parte deste projeto, não está no repositório e não é coberto pela MIT.
+- **Marcas:** OBS Studio é marca do OBS Project e iPhone é marca da Apple. Este projeto não tem ligação com eles.
 
 <!-- readme-padrao:footer -->
 <br>

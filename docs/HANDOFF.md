@@ -77,7 +77,7 @@ Branch `feat/m0`, **nada commitado** (commit só com autorização). Apresentaç
 ## Armadilhas
 
 - macOS lista o iPhone duas vezes no usbmuxd (USB e Network, Wi-Fi sync). Medido 18/11 16:27: segundos depois de ligar o cabo, com a entrada Network ativa, o macOS apaga a entrada USB. A extensão segue pela entrada Network e volta ao cabo quando a USB reaparece (~1 s de quadro parado na troca).
-- OBS Cam Mobile no iPhone do Leonardo está instalado pelo SideStore (bundle com.fmrocket.fmcam.3SUC2FNCD5). Atualizar copiando dist/OBSCamMobile.ipa para Documents do SideStore (devicectl copy to, appDataContainer) e instalar pelo + em My Apps. Instalar pelo Xcode cria um 4o app e bate no limite de 3 da conta grátis.
+- OBS Cam Mobile no iPhone do Leonardo está instalado pelo SideStore (bundle com.fmrocket.fmcam.<time>). Atualizar copiando dist/OBSCamMobile.ipa para Documents do SideStore (devicectl copy to, appDataContainer) e instalar pelo + em My Apps. Instalar pelo Xcode cria um 4o app e bate no limite de 3 da conta grátis.
 - Troca de lente igual à câmera nativa: botões mudam o zoom do dispositivo virtual (rampa de 0,25 s) e o iOS escolhe a câmera física que foca (5x de perto usa a wide cortada, de longe a tele). Medido 18/11 18:23 no 15 Pro Max. Nunca forçar a câmera física: a tele não foca de perto.
 - Foco por cena: só reaplica quando houve ponto tocado (reaplicar a cada evento fazia a tele caçar foco).
 

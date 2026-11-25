@@ -12,7 +12,7 @@ Câmera do iPhone dentro do OBS pelo cabo, com o menor atraso possível, para as
 - Nomes (18/11/2026): app do iPhone **OBS Cam Mobile**, extensão do OBS **OBS Cam Mobile Extension**. A pasta do repo é `obs_cam_mobile` (antes `fm_appcam`).
 - **Vários iPhones no mesmo PC** (18/11/2026): a extensão lista todos os aparelhos ligados (ex.: 4), cada um com a sua configuração e a sua fonte no OBS, independentes.
 - Transmissão (18/11/2026): PC Windows com **iPhone 17 Pro**. A extensão do Windows é tentada primeiro por compilação cruzada no Mac (clang-cl + SDK do Windows). Se não der, Visual Studio Build Tools no PC.
-- Uso interno, sem distribuição. Não usar nome nem marca DroidCam.
+- Repositório **público com licença MIT** (25/11/2026). Nada de UDID, time da Apple, e-mail, nome de terceiro ou credencial em arquivo versionado. O instalador com o serviço USB da Apple continua só para uso interno, fora do git e sem release público. Não usar nome nem marca DroidCam.
 
 ## Estrutura (planejada)
 

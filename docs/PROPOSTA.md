@@ -86,7 +86,7 @@ Não depender do DroidCam é o ganho principal: o protocolo, o app e a extensão
 ## Licenças
 
 - Código nosso do zero, sem trecho do DroidCam (o plugin dele é GPLv2, lemos só para entender o caminho USB).
-- A extensão liga com o libobs (GPLv2). Para uso interno não há distribuição, então não há obrigação. Se um dia for distribuída para fora, a extensão precisa sair como GPL.
+- Código sob MIT desde 25/11/2026 (decisão do Leonardo, repositório público). A extensão liga com o libobs (GPLv2): a MIT é compatível, e o binário distribuído segue a GPL.
 - libusbmuxd/libimobiledevice são LGPL: uso por biblioteca dinâmica, ok.
 
 ## Fases
